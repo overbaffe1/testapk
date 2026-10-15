@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "qWDTT — туннель в браузер",
   "short_name": "qWDTT",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Пускает трафик Chrome через ваш qWDTT/WDTT-туннель (VK TURN + WireGuard) через локальный SOCKS5.",
   "minimum_chrome_version": "116",
   "permissions": [

@@ -10,6 +10,11 @@ on:
       - "arena/f2fe24f5-testapk"
     tags:
       - "v*"
+    paths-ignore:
+      - "dist/qwdtt-windows-x64.zip"
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -60,3 +65,31 @@ jobs:
             tunnel/bin/wdtt-tunnel-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
             tunnel/bin/wdtt-native-host-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
           if-no-files-found: error
+
+      - name: Pack ready-to-install Windows bundle
+        if: matrix.goos == 'windows'
+        shell: pwsh
+        run: |
+          $bundle = 'package/qwdtt-windows-x64'
+          New-Item -ItemType Directory -Force "$bundle/bin", "$bundle/native" | Out-Null
+          Copy-Item -Recurse extension "$bundle/extension"
+          Copy-Item native/install.cmd, native/install.ps1 "$bundle/native/"
+          Copy-Item tunnel/bin/wdtt-tunnel-windows-amd64.exe "$bundle/bin/wdtt-tunnel.exe"
+          Copy-Item tunnel/bin/wdtt-native-host-windows-amd64.exe "$bundle/bin/wdtt-native-host.exe"
+          Copy-Item WINDOWS.md "$bundle/README.txt"
+          New-Item -ItemType Directory -Force dist | Out-Null
+          if (Test-Path dist/qwdtt-windows-x64.zip) { Remove-Item dist/qwdtt-windows-x64.zip }
+          Compress-Archive -Path "$bundle/*" -DestinationPath dist/qwdtt-windows-x64.zip -CompressionLevel Optimal
+
+      - name: Publish Windows bundle to this branch
+        if: matrix.goos == 'windows' && github.event_name == 'push'
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f dist/qwdtt-windows-x64.zip
+          git diff --cached --quiet
+          if ($LASTEXITCODE -ne 0) {
+            git commit -m "build: ready Windows bundle [skip ci]"
+            git push origin "HEAD:$env:GITHUB_REF_NAME"
+          }
