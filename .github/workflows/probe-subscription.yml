@@ -1,0 +1,28 @@
+name: probe-subscription
+
+on:
+  push:
+    branches: ["arena/f2fe24f5-testapk"]
+    paths: [".github/workflows/probe-subscription.yml"]
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch exact subscription response
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL='https://srv4.dream31.ru:2096/subnow/pwgq9a78fnaqpax6'
+          curl -kfsSL --max-time 30 -D /tmp/headers "$URL" -o /tmp/body
+          echo '--- headers ---'
+          cat /tmp/headers
+          echo '--- body metadata ---'
+          wc -c /tmp/body
+          file /tmp/body || true
+          echo '--- body repr ---'
+          python3 - <<'PY'
+          from pathlib import Path
+          body = Path('/tmp/body').read_bytes()
+          print(repr(body[:4000]))
+          PY
