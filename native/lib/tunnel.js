@@ -114,11 +114,26 @@ function status() {
   const state = readState();
   const running = isAlive(state.pid);
   const logLines = tailLog(200);
-  const socksReady = logLines.some((line) => line.includes("[SOCKS] listening"));
+  const detectedReady = logLines.some((line) => line.includes("[SOCKS] listening"));
+  let stateChanged = false;
+
+  // Запоминаем готовность на всю жизнь текущего процесса. Иначе после того,
+  // как строка listening выпадет из последних 200 строк лога, UI ошибочно
+  // снова покажет «Подключение…», хотя SOCKS продолжает работать.
+  if (running && detectedReady && !state.socksReady) {
+    state.socksReady = true;
+    stateChanged = true;
+  }
+  if (!running && state.socksReady) {
+    state.socksReady = false;
+    stateChanged = true;
+  }
+
+  const socksReady = running && Boolean(state.socksReady);
   const binaryPath = state.binary || findBinary("");
   const result = {
     running,
-    socksReady: running && socksReady,
+    socksReady,
     pid: running ? state.pid : 0,
     startedAt: state.startedAt || 0,
     socks: state.socks || null,
@@ -133,10 +148,11 @@ function status() {
     const err = detectError(logLines);
     if (err) {
       state.error = err;
-      writeState(state);
+      stateChanged = true;
       result.error = err;
     }
   }
+  if (stateChanged) writeState(state);
   return result;
 }
 
@@ -152,7 +168,7 @@ function start({ args, socks, binary }) {
     const msg =
       "Бинарник туннеля не найден. Соберите его командой tunnel/build.sh " +
       "или укажите путь в настройках расширения.";
-    writeState({ ...readState(), error: msg, pid: 0 });
+    writeState({ ...readState(), error: msg, pid: 0, socksReady: false });
     const err = new Error(msg);
     err.code = "binary-missing";
     throw err;
@@ -183,6 +199,7 @@ function start({ args, socks, binary }) {
     socks: socks || null,
     args: args || [],
     binary: bin,
+    socksReady: false,
     error: "",
   });
 
@@ -193,7 +210,7 @@ function start({ args, socks, binary }) {
 function stop() {
   const state = readState();
   if (!state.pid || !isAlive(state.pid)) {
-    writeState({ ...state, pid: 0, error: "" });
+    writeState({ ...state, pid: 0, socksReady: false, error: "" });
     return { stopped: false, status: status() };
   }
   try {
@@ -201,7 +218,7 @@ function stop() {
   } catch (err) {
     return { stopped: false, error: String(err?.message || err), status: status() };
   }
-  writeState({ ...state, pid: 0, error: "" });
+  writeState({ ...state, pid: 0, socksReady: false, error: "" });
   return { stopped: true, status: status() };
 }
 

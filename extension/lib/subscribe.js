@@ -120,7 +120,7 @@ function profileFromObject(obj, fallbackName = "WDTT") {
   if (!peer) {
     const ip = firstString(obj, ["ip", "server_ip", "serverIp", "domain"]);
     if (ip) {
-      const port = firstNumber(obj, ["port", "dtls_port", "server_port", "dtlsPort"], DEFAULT_DTLS_PORT);
+      const port = firstNumber(obj, ["port", "dtls", "dtls_port", "server_port", "dtlsPort"], DEFAULT_DTLS_PORT);
       peer = parsePeer(`${ip}:${port}`);
     }
   }
@@ -269,6 +269,16 @@ export function parseSubscription(raw) {
   }
 
   if (/^wdtt:\/\//i.test(text)) {
+    // Сервер подписки без ?format=qwdtt возвращает двойную обёртку:
+    // base64("wdtt://" + base64(JSON)). После первого декодирования сюда
+    // приходит wdtt://<base64 JSON>, а не легаси host:ports:pass:hash.
+    const rest = text.replace(/^wdtt:\/\//i, "").trim();
+    const decoded = tryBase64Decode(rest);
+    if (decoded) {
+      const nested = parseSubscription(decoded);
+      if (nested.ok) return { ...nested, kind: `${nested.kind}+wdtt-base64`, source: text };
+    }
+
     const profile = parseLegacyLink(text);
     if (profile) return { ok: true, profiles: [profile], kind: "wdtt-link", source: text };
     return { ok: false, error: "Не удалось разобрать ссылку wdtt://", kind: "wdtt-link" };

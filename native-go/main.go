@@ -55,12 +55,13 @@ type checkPayload struct {
 }
 
 type savedState struct {
-	PID       int      `json:"pid"`
-	StartedAt int64    `json:"startedAt"`
-	Binary    string   `json:"binary"`
-	Args      []string `json:"args"`
-	Socks     any      `json:"socks,omitempty"`
-	Error     string   `json:"error,omitempty"`
+	PID        int      `json:"pid"`
+	StartedAt  int64    `json:"startedAt"`
+	Binary     string   `json:"binary"`
+	Args       []string `json:"args"`
+	Socks      any      `json:"socks,omitempty"`
+	SocksReady bool     `json:"socksReady"`
+	Error      string   `json:"error,omitempty"`
 }
 
 type app struct {
@@ -175,7 +176,9 @@ func (a *app) handle(req request) {
 		a.emitStatus(result["status"].(map[string]any))
 	case "logs":
 		lines := 120
-		var payload struct{ Lines int `json:"lines"` }
+		var payload struct {
+			Lines int `json:"lines"`
+		}
 		_ = decodePayload(req.Payload, &payload)
 		if payload.Lines > 0 {
 			lines = payload.Lines
@@ -246,18 +249,29 @@ func (a *app) status() map[string]any {
 	state := a.readState()
 	running := processAlive(state.PID)
 	lines := tailFile(a.logPath, 200)
-	ready := false
-	for _, line := range lines {
-		if strings.Contains(line, "[SOCKS] listening") {
-			ready = true
+
+	// Раньше готовность каждый раз искалась только в последних 200 строках.
+	// Когда активный туннель писал достаточно лога, строка "[SOCKS] listening"
+	// выпадала из хвоста и UI ошибочно возвращался в «Подключение…».
+	ready := running && state.SocksReady
+	if running && !ready {
+		for _, line := range lines {
+			if strings.Contains(line, "[SOCKS] listening") {
+				ready = true
+				state.SocksReady = true
+				a.writeState(state)
+				break
+			}
 		}
 	}
+	if !running && state.SocksReady {
+		state.SocksReady = false
+		a.writeState(state)
+	}
+
 	binaryPath := state.Binary
 	if binaryPath == "" {
 		binaryPath = a.findBinary("")
-	}
-	if !running {
-		ready = false
 	}
 	return map[string]any{
 		"running":     running,
@@ -282,6 +296,7 @@ func (a *app) start(payload startPayload) (map[string]any, error) {
 	if binaryPath == "" {
 		state := a.readState()
 		state.PID = 0
+		state.SocksReady = false
 		state.Error = "Компонент туннеля wdtt-tunnel не установлен"
 		a.writeState(state)
 		return nil, errors.New(state.Error)
@@ -305,11 +320,12 @@ func (a *app) start(payload startPayload) (map[string]any, error) {
 	_ = logFile.Close()
 	a.cmd = cmd
 	state := savedState{
-		PID:       cmd.Process.Pid,
-		StartedAt: time.Now().UnixMilli(),
-		Binary:    binaryPath,
-		Args:      payload.Args,
-		Socks:     payload.Socks,
+		PID:        cmd.Process.Pid,
+		StartedAt:  time.Now().UnixMilli(),
+		Binary:     binaryPath,
+		Args:       payload.Args,
+		Socks:      payload.Socks,
+		SocksReady: false,
 	}
 	a.writeState(state)
 	go func() {
@@ -319,6 +335,7 @@ func (a *app) start(payload startPayload) (map[string]any, error) {
 			return
 		}
 		latest.PID = 0
+		latest.SocksReady = false
 		if err != nil {
 			latest.Error = "Туннель завершился: " + err.Error()
 		}
@@ -336,6 +353,7 @@ func (a *app) stop() map[string]any {
 		}
 	}
 	state.PID = 0
+	state.SocksReady = false
 	state.Error = ""
 	a.writeState(state)
 	return map[string]any{"stopped": stopped, "status": a.status()}
@@ -401,7 +419,9 @@ func checkIP(payload checkPayload) (map[string]any, error) {
 		}
 		ip := strings.TrimSpace(body)
 		if target.json {
-			var value struct{ IP string `json:"ip"` }
+			var value struct {
+				IP string `json:"ip"`
+			}
 			if err := json.Unmarshal([]byte(body), &value); err != nil {
 				lastErr = err
 				continue

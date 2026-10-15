@@ -3,7 +3,7 @@
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzBOREFT72ZG9B+1qHtFLeyZEpW5SxXSiACC3wudfk1LxbwpjF71l/SYD+0zIDKrs5QYHtpRg46iFw8xZ7iHa261kH/SN352jZiviX+XO+z+0AGlzpoxVwo9DBdFuhphaDGqS/62pd0H3XJ8OZL4EH6HZn37j+yDqyden2VjaUP8s2bL8Hg9vAOmc8Xk/Momjpg6xrdzxrrg4O8ln/YoKhPx2MD2/VVWBXGedjHX2YqKVXeklL5mpNjzwnV5OiAVzUzFxW6vZzsZAeyZlhl/CNi5yr9I1MgjgPULppgJLU7mytYID8M0XE2D0bY3TrVxVzettyqsFfk2wgRuRPj+ApwIDAQAB",
   "name": "qWDTT — туннель в браузер",
   "short_name": "qWDTT",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Пускает трафик Chrome через ваш qWDTT/WDTT-туннель (VK TURN + WireGuard) через локальный SOCKS5.",
   "minimum_chrome_version": "116",
   "permissions": [

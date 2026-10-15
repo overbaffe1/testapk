@@ -105,6 +105,15 @@ test("хост запускает и останавливает туннель",
     const logs = await client.request("logs", { lines: 50 });
     assert.ok(logs.lines.some((line) => line.includes("[SOCKS] listening")));
 
+    // Готовность должна запоминаться, а не зависеть от присутствия listening
+    // в последних 200 строках. Имитируем долгую работу и большой лог.
+    fs.appendFileSync(
+      path.join(home, "tunnel.log"),
+      `${Array.from({ length: 250 }, (_, index) => `[СТАТ] строка ${index}`).join("\n")}\n`,
+    );
+    const afterLongLog = await client.request("status");
+    assert.equal(afterLongLog.status.socksReady, true, "готовый туннель не должен снова стать «подключающимся»");
+
     const stop = await client.request("stop");
     assert.equal(stop.stopped, true);
 

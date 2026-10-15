@@ -30,6 +30,11 @@ const QWDTT_JSON = JSON.stringify({
 const WDTT_JSON_B64 =
   "eyJ2cG4iOiJ2ay5ydS9jZXJiZXIzMSDQktCw0Ygg0LvRg9GH0YjQuNC5IHZwbiIsIm5hbWUiOiJAb3ZlcmJhZmUxIiwiaXAiOiJzcnY0LmRyZWFtMzEucnUiLCJkdGxzIjo1NjAwMCwicmF3Ijo1NjAwMywicGFzcyI6Ims3RmFlYWFSMlVieXZKZGUiLCJoYXNoIjoiRkR6dWp0Z18yZEV3MUtKSzVVRkxBc0hOeHRJRDMybEhhMk1kNGxTTEpxdyIsInN1YiI6Imh0dHBzOi8vc3J2NC5kcmVhbTMxLnJ1OjIwOTYvc3Vibm93L3B3Z3E5YTc4Zm5hcXBheDYifQ==";
 
+// Точный ответ https://srv4.dream31.ru:2096/subnow/pwgq9a78fnaqpax6:
+// base64(wdtt://base64(JSON)).
+const SUBSCRIPTION_HTTP_BODY =
+  "d2R0dDovL2V5SjJjRzRpT2lKMmF5NXlkUzlqWlhKaVpYSXpNU0RRa3RDdzBZZ2cwTHZSZzlHSDBZalF1TkM1SUhad2JpSXNJbTVoYldVaU9pSkFiM1psY21KaFptVXhJaXdpYVhBaU9pSnpjblkwTG1SeVpXRnRNekV1Y25VaUxDSmtkR3h6SWpvMU5qQXdNQ3dpY21GM0lqbzFOakF3TXl3aWNHRnpjeUk2SW1zM1JtRmxZV0ZTTWxWaWVYWktaR1VpTENKb1lYTm9Jam9pUmtSNmRXcDBaMTh5WkVWM01VdEtTelZWUmt4QmMwaE9lSFJKUkRNeWJFaGhNazFrTkd4VFRFcHhkeUlzSW5OMVlpSTZJbWgwZEhCek9pOHZjM0oyTkM1a2NtVmhiVE14TG5KMU9qSXdPVFl2YzNWaWJtOTNMM0IzWjNFNVlUYzRabTVoY1hCaGVEWWlmUT09";
+
 const WDTT_LINK =
   "wdtt://srv4.dream31.ru:56000:56001:0:k7FaeaaR2UbyvJde:FDzujtg_2dEw1KJK5UFLAsHNxtID32lHa2Md4lSLJqw";
 
@@ -54,6 +59,17 @@ test("парсит base64-ссылку WDTT JSON", () => {
   const p = res.profiles[0];
   assert.equal(p.peer.host, "srv4.dream31.ru");
   assert.equal(p.peer.port, 56000);
+  assert.equal(p.password, "k7FaeaaR2UbyvJde");
+  assert.deepEqual(p.hashes, ["FDzujtg_2dEw1KJK5UFLAsHNxtID32lHa2Md4lSLJqw"]);
+});
+
+test("парсит точный двойной base64-ответ HTTP-подписки", () => {
+  const res = parseSubscription(SUBSCRIPTION_HTTP_BODY);
+  assert.equal(res.ok, true);
+  const p = res.profiles[0];
+  assert.equal(p.peer.host, "srv4.dream31.ru");
+  assert.equal(p.peer.port, 56000);
+  assert.equal(p.rawPort, 56003);
   assert.equal(p.password, "k7FaeaaR2UbyvJde");
   assert.deepEqual(p.hashes, ["FDzujtg_2dEw1KJK5UFLAsHNxtID32lHa2Md4lSLJqw"]);
 });

@@ -50,6 +50,11 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
         run: go build -trimpath -ldflags "-s -w" -o "../bin/wdtt-tunnel-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}" .
 
+      - name: Test native messaging host
+        if: matrix.goarch == 'amd64' && (matrix.goos == 'linux' || matrix.goos == 'windows')
+        working-directory: native-go
+        run: go test ./...
+
       - name: Build native messaging host
         working-directory: native-go
         env:
