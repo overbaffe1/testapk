@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <title>qWDTT — настройки</title>
+    <link rel="stylesheet" href="popup.css" />
+    <style>
+      body { width: auto; max-width: 860px; margin: 0 auto; padding: 24px 20px 60px; }
+      h1 { font-size: 20px; margin: 0 0 4px; }
+      h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); margin: 0 0 12px; }
+      .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+      .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+      .field label { font-size: 11px; color: var(--muted); }
+      input[type="text"], input[type="number"], input[type="password"], select, textarea {
+        background: #11131a; color: var(--fg); border: 1px solid var(--border);
+        border-radius: 8px; padding: 7px 9px; font: 12px/1.4 inherit; width: 100%;
+      }
+      input:focus, select:focus, textarea:focus { outline: 1px solid var(--accent); }
+      .check { display: flex; align-items: center; gap: 8px; margin: 8px 0; font-size: 13px; }
+      .check input { width: 16px; height: 16px; }
+      .card { margin-bottom: 16px; }
+      pre.cmd {
+        background: #11131a; border: 1px solid var(--border); border-radius: 8px; padding: 10px;
+        font: 11.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-x: auto; margin: 8px 0;
+      }
+      .steps { margin: 0; padding-left: 20px; }
+      .steps li { margin: 6px 0; }
+      code { background: #11131a; padding: 1px 5px; border-radius: 4px; font-family: ui-monospace, monospace; }
+      .hint { color: var(--muted); font-size: 12px; }
+      .toolbar { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+    </style>
+  </head>
+  <body>
+    <h1>qWDTT — туннель в браузер</h1>
+    <p class="hint">Расширение направляет трафик Chrome в локальный SOCKS5, который держит нативный туннель WDTT (VK TURN + WireGuard).</p>
+
+    <section class="card" id="install">
+      <h2>1. Установка нативного хоста</h2>
+      <ol class="steps">
+        <li>Соберите или скачайте туннель: <code>tunnel/build.sh</code> → <code>tunnel/bin/wdtt-tunnel</code>.</li>
+        <li>Зарегистрируйте native host, указав ID расширения:<br /><code>./native/install.sh &lt;EXTENSION_ID&gt;</code></li>
+        <li>Перезапустите Chrome (или перезагрузите расширение).</li>
+      </ol>
+      <p class="hint">ID расширения: <b id="extIdFull">—</b> <button id="copyId" class="mini" type="button">копировать</button></p>
+      <pre class="cmd" id="installCmd">./native/install.sh &lt;EXTENSION_ID&gt;</pre>
+    </section>
+
+    <section class="card">
+      <h2>2. Подписка</h2>
+      <div class="field">
+        <label>Текущий профиль</label>
+        <textarea id="profileBox" rows="3" readonly></textarea>
+      </div>
+      <div class="toolbar">
+        <button id="openPopup" type="button">Открыть popup и вставить подписку</button>
+        <button id="reloadState" type="button">Обновить</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>3. Режим работы</h2>
+      <div class="field">
+        <label>Источник SOCKS5</label>
+        <select id="mode">
+          <option value="managed">Управляемый — расширение само запускает туннель</option>
+          <option value="external">Внешний — туннель уже запущен (Android, systemd, руками)</option>
+        </select>
+      </div>
+      <div class="grid">
+        <div class="field">
+          <label>SOCKS5 хост</label>
+          <input id="socksHost" type="text" />
+        </div>
+        <div class="field">
+          <label>SOCKS5 порт</label>
+          <input id="socksPort" type="number" min="1" max="65535" />
+        </div>
+      </div>
+      <label class="check"><input id="socksAuth" type="checkbox" /> Требовать логин/пароль SOCKS5</label>
+      <div class="grid">
+        <div class="field">
+          <label>SOCKS5 логин</label>
+          <input id="socksUser" type="text" />
+        </div>
+        <div class="field">
+          <label>SOCKS5 пароль</label>
+          <input id="socksPass" type="password" />
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>4. Туннель</h2>
+      <div class="field">
+        <label>Путь к бинарнику туннеля (пусто — искать автоматически)</label>
+        <input id="tunnelBinary" type="text" placeholder="например /home/user/testapk/tunnel/bin/wdtt-tunnel" />
+      </div>
+      <div class="grid">
+        <div class="field">
+          <label>Потоков (кратно 9; 0 = взять из подписки)</label>
+          <input id="tunnelWorkers" type="number" min="0" max="108" step="9" />
+        </div>
+        <div class="field">
+          <label>DNS для VK</label>
+          <select id="tunnelDns">
+            <option value="yandex">Яндекс</option>
+            <option value="cloudflare">Cloudflare</option>
+            <option value="google">Google</option>
+            <option value="doh-yandex">Яндекс DoH</option>
+            <option value="doh-cloudflare">Cloudflare DoH</option>
+            <option value="doh-google">Google DoH</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Маскировка</label>
+          <select id="tunnelObfs">
+            <option value="audio">audio</option>
+            <option value="video">video</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Капча</label>
+          <select id="tunnelCaptcha">
+            <option value="auto">auto</option>
+            <option value="rjs">rjs</option>
+            <option value="wv">wv</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Авторизация VK</label>
+          <select id="tunnelVkAuth">
+            <option value="anonymous">anonymous</option>
+            <option value="account">account</option>
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>5. Поведение</h2>
+      <label class="check"><input id="autoConnect" type="checkbox" /> Подключаться при запуске браузера</label>
+      <label class="check"><input id="killSwitch" type="checkbox" /> Kill switch: не возвращать трафик в direct, пока туннель не поднят</label>
+      <div class="field">
+        <label>Список хостов напрямую (через запятую)</label>
+        <input id="bypassList" type="text" />
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>6. Диагностика</h2>
+      <pre class="cmd" id="diag">—</pre>
+      <div class="toolbar">
+        <button id="diagRefresh" type="button">Обновить диагностику</button>
+        <button id="saveBtn" class="primary" type="button">Сохранить настройки</button>
+        <span id="saveNote" class="hint"></span>
+      </div>
+    </section>
+
+    <script type="module" src="options.js"></script>
+  </body>
+</html>

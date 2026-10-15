@@ -1,0 +1,14 @@
+# Сборки и артефакты
+tunnel/bin/
+dist/
+node_modules/
+
+# Состояние нативного хоста
+.wdtt-tunnel/
+native/wdtt-host.sh
+
+# Прочее
+*.log
+.DS_Store
+.idea/
+.vscode/

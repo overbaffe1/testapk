@@ -1,0 +1,14 @@
+qWDTT — туннель в браузер
+Copyright (C) 2026  qWDTT Chrome extension contributors
+
+Этот проект распространяется по лицензии GNU GPL v3 (см. LICENSE).
+
+Состав проекта:
+  * extension/, native/, scripts/, tests/ — оригинальный код Chrome-расширения
+    и native messaging хоста (GPL-3.0).
+  * tunnel/src/ — Go-клиент WDTT, скопированный без изменений из
+    https://github.com/SpaceNeuroX/proxy-turn-vk-android (qWDTT 1.4.4,
+    коммит a296c57eaba69bb9479a24f9157856490890e47d), GPL-3.0.
+    Полный текст лицензии — tunnel/src/LICENSE.upstream.
+
+Оригинальный проект WDTT: https://github.com/amurcanov/proxy-turn-vk-android

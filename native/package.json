@@ -1,0 +1,9 @@
+{
+  "name": "wdtt-native-host",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "description": "Native messaging host: управление процессом туннеля WDTT",
+  "main": "host.js",
+  "license": "GPL-3.0"
+}

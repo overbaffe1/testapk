@@ -1,0 +1,9 @@
+{
+  "name": "com.wdtt.tunnel",
+  "description": "qWDTT Chrome extension — управление туннелем WDTT (локальный SOCKS5)",
+  "path": "/ABSOLUTE/PATH/TO/native/host.js",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://ВАШ_ID_РАСШИРЕНИЯ/"
+  ]
+}
