@@ -140,8 +140,20 @@ test("подключение включает SOCKS5-прокси, отключ�
   assert.equal(setOp.value.rules.singleProxy.port, 1080);
   assert.ok(nativeCalls.includes("com.wdtt.tunnel"), "должен быть вызван нативный хост");
 
+  // Добавление split-правила на активном подключении сразу включает PAC:
+  // совпавший сайт идёт DIRECT, остальные остаются на SOCKS5.
+  const split = await send(listeners, {
+    type: "updateSettings",
+    patch: { directPatterns: ["arena.ai/*"] },
+  });
+  assert.equal(split.ok, true);
+  const splitOp = proxyOps.filter((op) => op.op === "set").at(-1);
+  assert.equal(splitOp.value.mode, "pac_script");
+  assert.match(splitOp.value.pacScript.data, /arena\.ai\/\*/);
+
   const state = await send(listeners, { type: "getState" });
   assert.equal(state.result.state.enabled, true);
+  assert.deepEqual(state.result.state.directPatterns, ["arena.ai/*"]);
 
   await send(listeners, { type: "disconnect" });
   assert.ok(proxyOps.some((op) => op.op === "clear"), "прокси должен быть снят");

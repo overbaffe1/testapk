@@ -1,3 +1,4 @@
+import { normalizeDirectPatterns } from "./lib/proxy.js";
 import { extractSubscriptionJsonUrl, parseSubscription } from "./lib/subscribe.js";
 
 const $ = (id) => document.getElementById(id);
@@ -12,6 +13,9 @@ const ui = {
   ip: $("ip"),
   message: $("message"),
   modes: [...document.querySelectorAll('input[name="mode"]')],
+  splitBox: $("splitBox"),
+  directPatterns: $("directPatterns"),
+  applySplit: $("applySplit"),
 };
 
 let snapshot = null;
@@ -30,6 +34,10 @@ function selectedMode() {
 function selectMode(value) {
   const normalized = ["raw", "wg", "socks5"].includes(value) ? value : "socks5";
   for (const input of ui.modes) input.checked = input.value === normalized;
+}
+
+function selectedDirectPatterns() {
+  return normalizeDirectPatterns(ui.directPatterns.value);
 }
 
 function message(text = "", kind = "") {
@@ -55,6 +63,12 @@ function render({ state, tunnel }) {
 
   if (!ui.subscription.value && state.profileSource) ui.subscription.value = state.profileSource;
   selectMode(state.transportMode);
+  const directPatterns = state.directPatterns || [];
+  if (document.activeElement !== ui.directPatterns) ui.directPatterns.value = directPatterns.join("\n");
+  if (!ui.splitBox.dataset.initialized) {
+    ui.splitBox.open = directPatterns.length > 0;
+    ui.splitBox.dataset.initialized = "true";
+  }
 
   const mode = (state.transportMode || "socks5").toUpperCase();
   const profile = state.profile;
@@ -74,6 +88,8 @@ function render({ state, tunnel }) {
   for (const input of ui.modes) input.disabled = enabled || busy;
   ui.connect.disabled = busy;
   ui.checkIp.disabled = busy || !ready;
+  ui.directPatterns.disabled = busy;
+  ui.applySplit.disabled = busy;
 
   if (state.lastError) message(state.lastError, "error");
 }
@@ -134,6 +150,23 @@ async function loadProfile(source) {
   return parsed.profiles[0];
 }
 
+ui.applySplit.addEventListener("click", async () => {
+  if (busy) return;
+  busy = true;
+  ui.applySplit.disabled = true;
+  try {
+    const patterns = selectedDirectPatterns();
+    await send("updateSettings", { patch: { directPatterns: patterns } });
+    ui.directPatterns.value = patterns.join("\n");
+    message(patterns.length ? "Сплит-туннель применён" : "Сплит-туннель очищен: весь трафик через VPN", "ok");
+  } catch (error) {
+    message(error.message, "error");
+  } finally {
+    busy = false;
+    await refresh();
+  }
+});
+
 ui.connect.addEventListener("click", async () => {
   if (busy) return;
   busy = true;
@@ -151,7 +184,12 @@ ui.connect.addEventListener("click", async () => {
       setStatus("Подключение…", "wait");
       await loadProfile(source);
       await send("updateSettings", {
-        patch: { mode: "managed", transportMode: selectedMode(), lastError: "" },
+        patch: {
+          mode: "managed",
+          transportMode: selectedMode(),
+          directPatterns: selectedDirectPatterns(),
+          lastError: "",
+        },
       });
       await send("connect");
       message("Туннель запускается…", "ok");

@@ -27,6 +27,7 @@ function fill(state) {
   $("tunnelVkAuth").value = state.tunnel.vkAuthMode;
   $("autoConnect").checked = Boolean(state.autoConnect);
   $("killSwitch").checked = Boolean(state.killSwitch);
+  $("directPatterns").value = (state.directPatterns || []).join("\n");
   $("bypassList").value = (state.bypassList || []).join(", ");
   $("profileBox").value = state.profile
     ? JSON.stringify(state.profile, null, 2)
@@ -53,6 +54,10 @@ function collect() {
     },
     autoConnect: $("autoConnect").checked,
     killSwitch: $("killSwitch").checked,
+    directPatterns: $("directPatterns").value
+      .split(/[\n,]+/)
+      .map((s) => s.trim())
+      .filter(Boolean),
     bypassList: $("bypassList").value
       .split(",")
       .map((s) => s.trim())

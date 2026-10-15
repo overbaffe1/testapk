@@ -51,7 +51,7 @@ function badgeFor(state) {
 
 async function applyProxyState(state, enabled) {
   if (enabled) {
-    await enableProxy(state.socks, state.bypassList);
+    await enableProxy(state.socks, state.bypassList, state.directPatterns);
   } else {
     await disableProxy();
   }

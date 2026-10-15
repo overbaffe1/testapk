@@ -141,7 +141,12 @@
       <label class="check"><input id="autoConnect" type="checkbox" /> Подключаться при запуске браузера</label>
       <label class="check"><input id="killSwitch" type="checkbox" /> Kill switch: не возвращать трафик в direct, пока туннель не поднят</label>
       <div class="field">
-        <label>Список хостов напрямую (через запятую)</label>
+        <label>Сплит-туннель: сайты напрямую, по одному шаблону на строку (<code>arena.ai/*</code>)</label>
+        <textarea id="directPatterns" rows="4" placeholder="arena.ai/*"></textarea>
+        <span class="hint">Поддерживаются домены, URL и * как любое продолжение. Всё остальное идёт через VPN.</span>
+      </div>
+      <div class="field">
+        <label>Технический список локальных хостов напрямую (через запятую)</label>
         <input id="bypassList" type="text" />
       </div>
     </section>

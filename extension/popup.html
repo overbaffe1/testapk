@@ -29,6 +29,15 @@
         <label><input type="radio" name="mode" value="socks5" checked /><span>SOCKS5</span></label>
       </div>
 
+      <details id="splitBox" class="split-box">
+        <summary>Сплит-туннель <span>сайты напрямую</span></summary>
+        <label class="caption" for="directPatterns">Без VPN</label>
+        <textarea id="directPatterns" rows="3" spellcheck="false"
+                  placeholder="arena.ai/*"></textarea>
+        <small>По одному шаблону на строку. <b>*</b> — любое продолжение. Всё остальное идёт через VPN.</small>
+        <button id="applySplit" class="split-save" type="button">Применить</button>
+      </details>
+
       <button id="connect" class="connect" type="button">Подключить</button>
 
       <section class="info">

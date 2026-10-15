@@ -29,8 +29,10 @@ export const DEFAULTS = {
   autoConnect: false,
   /** Kill switch: не возвращать трафик в direct, пока туннель не поднят. */
   killSwitch: true,
-  /** Список хостов, которые идут напрямую. */
+  /** Технический список локальных хостов, которые всегда идут напрямую. */
   bypassList: ["localhost", "127.0.0.1", "::1", "<local>"],
+  /** Пользовательские URL/домены split tunnel: напрямую, остальное через VPN. */
+  directPatterns: [],
   /** Параметры нативного туннеля. */
   tunnel: {
     binary: "",
@@ -56,6 +58,7 @@ export function withDefaults(input) {
     socks: { ...base.socks, ...(input.socks || {}) },
     tunnel: { ...base.tunnel, ...(input.tunnel || {}) },
     bypassList: Array.isArray(input.bypassList) ? input.bypassList : base.bypassList,
+    directPatterns: Array.isArray(input.directPatterns) ? input.directPatterns : base.directPatterns,
   };
 }
 
