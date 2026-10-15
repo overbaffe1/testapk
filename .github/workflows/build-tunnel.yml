@@ -6,6 +6,8 @@ name: build-tunnel
 on:
   workflow_dispatch:
   push:
+    branches:
+      - "arena/f2fe24f5-testapk"
     tags:
       - "v*"
 

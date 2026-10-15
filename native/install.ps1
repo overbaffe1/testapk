@@ -1,62 +1,136 @@
-# Registers the com.wdtt.tunnel native messaging host on Windows.
+# Устанавливает native-messaging host com.wdtt.tunnel в Windows.
+# Запускать из корня распакованного репозитория:
 #
-#   .\native\install.ps1 -ExtensionId abcdefghijklmnopabcdefghijklmnop
+#   powershell -ExecutionPolicy Bypass -File .\native\install.ps1 -ExtensionId abcdefghijklmnopabcdefghijklmnop
 
 param(
-  [Parameter(Mandatory = $true)][string]$ExtensionId,
+  [Parameter(Mandatory = $true)][ValidatePattern('^[a-p]{32}$')][string]$ExtensionId,
   [string]$RepoRoot = (Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path))
 )
 
 $ErrorActionPreference = 'Stop'
 
-$node = (Get-Command node -ErrorAction SilentlyContinue).Source
-if (-not $node) { throw "node not found in PATH. Install Node.js 18+ and retry." }
+$nodeCommand = Get-Command node -ErrorAction SilentlyContinue
+if (-not $nodeCommand) {
+  throw "Node.js 18+ не найден. Установите LTS с https://nodejs.org/ и повторите команду."
+}
+$node = $nodeCommand.Source
 
 $stateDir = Join-Path $env:LOCALAPPDATA 'wdtt-tunnel'
-New-Item -ItemType Directory -Force -Path $stateDir | Out-Null
-New-Item -ItemType Directory -Force -Path (Join-Path $stateDir 'lib') | Out-Null
+$libDir = Join-Path $stateDir 'lib'
+$binDir = Join-Path $stateDir 'bin'
+New-Item -ItemType Directory -Force -Path $stateDir, $libDir, $binDir | Out-Null
 
-Copy-Item -Force (Join-Path $RepoRoot 'native\host.js')     (Join-Path $stateDir 'host.js')
-Copy-Item -Force (Join-Path $RepoRoot 'native\lib\tunnel.js') (Join-Path $stateDir 'lib\tunnel.js')
-Copy-Item -Force (Join-Path $RepoRoot 'native\lib\socks.js')  (Join-Path $stateDir 'lib\socks.js')
+Copy-Item -Force (Join-Path $RepoRoot 'native\host.js') (Join-Path $stateDir 'host.js')
+Copy-Item -Force (Join-Path $RepoRoot 'native\lib\tunnel.js') (Join-Path $libDir 'tunnel.js')
+Copy-Item -Force (Join-Path $RepoRoot 'native\lib\socks.js') (Join-Path $libDir 'socks.js')
 
-$wrapper = Join-Path $stateDir 'wdtt-host.cmd'
-@"
-@echo off
-set WDTT_HOME=$stateDir
-"$node" "$stateDir\host.js" %*
-"@ | Set-Content -Encoding ASCII $wrapper
+# Windows Chrome запускает native host только как .exe. Маленький C# launcher
+# проксирует бинарные stdin/stdout в Node.js-хост и задаёт его рабочий каталог.
+$launcherSource = @'
+using System;
+using System.Diagnostics;
+using System.IO;
+using System.Threading;
 
-$manifest = @"
+public static class WdttNativeLauncher
 {
-  "name": "com.wdtt.tunnel",
-  "description": "qWDTT Chrome extension - WDTT tunnel control (local SOCKS5)",
-  "path": "$wrapper",
-  "type": "stdio",
-  "allowed_origins": [
-    "chrome-extension://$ExtensionId/"
-  ]
+    public static int Main(string[] args)
+    {
+        string home = AppDomain.CurrentDomain.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
+        string node = Environment.GetEnvironmentVariable("WDTT_NODE");
+        if (String.IsNullOrWhiteSpace(node)) node = "node.exe";
+
+        var start = new ProcessStartInfo();
+        start.FileName = node;
+        start.Arguments = "\"" + Path.Combine(home, "host.js") + "\"";
+        start.WorkingDirectory = home;
+        start.UseShellExecute = false;
+        start.CreateNoWindow = true;
+        start.RedirectStandardInput = true;
+        start.RedirectStandardOutput = true;
+        start.RedirectStandardError = false;
+        start.EnvironmentVariables["WDTT_HOME"] = home;
+
+        try
+        {
+            using (var child = Process.Start(start))
+            {
+                var inputThread = new Thread(() =>
+                {
+                    try
+                    {
+                        Console.OpenStandardInput().CopyTo(child.StandardInput.BaseStream);
+                        child.StandardInput.Close();
+                    }
+                    catch { }
+                });
+                inputThread.IsBackground = true;
+                inputThread.Start();
+
+                child.StandardOutput.BaseStream.CopyTo(Console.OpenStandardOutput());
+                Console.OpenStandardOutput().Flush();
+                child.WaitForExit();
+                return child.ExitCode;
+            }
+        }
+        catch (Exception error)
+        {
+            Console.Error.WriteLine("qWDTT native host: " + error.Message);
+            return 1;
+        }
+    }
 }
-"@
+'@
 
-$targets = @(
-  (Join-Path $env:LOCALAPPDATA 'Google\Chrome\User Data\NativeMessagingHosts'),
-  (Join-Path $env:LOCALAPPDATA 'Chromium\User Data\NativeMessagingHosts'),
-  (Join-Path $env:LOCALAPPDATA 'BraveSoftware\Brave-Browser\User Data\NativeMessagingHosts'),
-  (Join-Path $env:LOCALAPPDATA 'Microsoft\Edge\User Data\NativeMessagingHosts')
+$launcher = Join-Path $stateDir 'wdtt-native-host.exe'
+if (Test-Path $launcher) { Remove-Item -Force $launcher }
+Add-Type -TypeDefinition $launcherSource -Language CSharp -OutputAssembly $launcher -OutputType ConsoleApplication
+
+# Копируем готовый туннель из пакета/репозитория, если он присутствует.
+$tunnelCandidates = @(
+  (Join-Path $RepoRoot 'tunnel\bin\wdtt-tunnel.exe'),
+  (Join-Path $RepoRoot 'wdtt-tunnel.exe')
 )
-
-foreach ($dir in $targets) {
-  if (Test-Path (Split-Path -Parent $dir)) {
-    New-Item -ItemType Directory -Force -Path $dir | Out-Null
-    $manifest | Set-Content -Encoding UTF8 (Join-Path $dir 'com.wdtt.tunnel.json')
-    Write-Host "OK: $dir\com.wdtt.tunnel.json"
+$tunnelInstalled = $false
+foreach ($candidate in $tunnelCandidates) {
+  if (Test-Path $candidate) {
+    Copy-Item -Force $candidate (Join-Path $binDir 'wdtt-tunnel.exe')
+    $tunnelInstalled = $true
+    break
   }
 }
 
-Write-Host ''
-Write-Host 'Done. Restart Chrome (or reload the extension).'
-$tunnelBin = Join-Path $RepoRoot 'tunnel\bin\wdtt-tunnel.exe'
-if (-not (Test-Path $tunnelBin)) {
-  Write-Host "WARNING: tunnel binary not found - build it with tunnel\build.ps1 (see tunnel\README.md)"
+$manifestPath = Join-Path $stateDir 'com.wdtt.tunnel.json'
+$manifestObject = [ordered]@{
+  name = 'com.wdtt.tunnel'
+  description = 'qWDTT Chrome extension - WDTT tunnel control (local SOCKS5)'
+  path = $launcher
+  type = 'stdio'
+  allowed_origins = @("chrome-extension://$ExtensionId/")
 }
+$manifestJson = $manifestObject | ConvertTo-Json -Depth 4
+[IO.File]::WriteAllText($manifestPath, $manifestJson, (New-Object Text.UTF8Encoding($false)))
+
+# На Windows Chrome/Edge/Brave ищут путь к manifest в реестре HKCU.
+$registryKeys = @(
+  'HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.wdtt.tunnel',
+  'HKCU:\Software\Chromium\NativeMessagingHosts\com.wdtt.tunnel',
+  'HKCU:\Software\BraveSoftware\Brave-Browser\NativeMessagingHosts\com.wdtt.tunnel',
+  'HKCU:\Software\Microsoft\Edge\NativeMessagingHosts\com.wdtt.tunnel'
+)
+foreach ($key in $registryKeys) {
+  New-Item -Path $key -Force | Out-Null
+  Set-Item -Path $key -Value $manifestPath
+  Write-Host "OK: $key"
+}
+
+Write-Host ''
+Write-Host "Native host установлен: $launcher" -ForegroundColor Green
+if ($tunnelInstalled) {
+  Write-Host "Туннель установлен: $binDir\wdtt-tunnel.exe" -ForegroundColor Green
+} else {
+  Write-Host "ВНИМАНИЕ: wdtt-tunnel.exe не найден." -ForegroundColor Yellow
+  Write-Host "Положите его в $binDir\wdtt-tunnel.exe или выполните .\tunnel\build.ps1"
+}
+Write-Host 'Полностью закройте и снова запустите Chrome, затем нажмите «Подключить».'
