@@ -87,7 +87,9 @@ jobs:
         run: |
           $bundle = 'package/qwdtt-windows-x64'
           New-Item -ItemType Directory -Force "$bundle/bin", "$bundle/native" | Out-Null
-          Copy-Item -Recurse extension "$bundle/extension"
+          # Файлы расширения кладём прямо в корень пакета: пользователь выбирает
+          # распакованную папку целиком, и Chrome сразу видит manifest.json.
+          Copy-Item -Recurse extension/* "$bundle/"
           Copy-Item native/install.cmd, native/install.ps1 "$bundle/native/"
           Copy-Item tunnel/bin/wdtt-tunnel-windows-amd64.exe "$bundle/bin/wdtt-tunnel.exe"
           Copy-Item tunnel/bin/wdtt-native-host-windows-amd64.exe "$bundle/bin/wdtt-native-host.exe"
