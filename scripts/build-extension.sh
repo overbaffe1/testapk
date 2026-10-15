@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Собирает пакет расширения для установки в Chrome (dist/qwdtt-chrome-<версия>.zip).
+# Собирает пакет расширения для установки в Chrome (dist/chrome-<версия>.zip).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -7,7 +7,7 @@ EXT_DIR="$ROOT/extension"
 DIST="$ROOT/dist"
 
 VERSION="$(python3 -c "import json;print(json.load(open('$EXT_DIR/manifest.json'))['version'])")"
-OUT="$DIST/qwdtt-chrome-$VERSION.zip"
+OUT="$DIST/chrome-$VERSION.zip"
 
 mkdir -p "$DIST"
 rm -f "$OUT"

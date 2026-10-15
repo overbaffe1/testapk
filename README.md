@@ -29,7 +29,7 @@ Chrome  ──SOCKS5──▶  wdtt-tunnel (локальный)  ──UDP/WRAP�
 
 2. **Загрузите расширение в Chrome**: `chrome://extensions` → включите **«Режим разработчика»** →
    **«Загрузить распакованное расширение»** → выберите папку `extension/` из этого репозитория
-   (или распакуйте `dist/qwdtt-chrome-1.0.0.zip` и выберите папку).
+   (или распакуйте `dist/chrome-1.0.0.zip` и выберите папку).
 
 3. **Скопируйте ID расширения** (chrome://extensions → «Копировать ID») и зарегистрируйте
    нативный хост:
@@ -141,7 +141,7 @@ https://srv4.dream31.ru:2096/subnow/xxxx?format=qwdtt
 
 ```bash
 npm test                      # юнит-тесты парсера, нативного хоста и service worker
-./scripts/build-extension.sh  # dist/qwdtt-chrome-<версия>.zip
+./scripts/build-extension.sh  # dist/chrome-<версия>.zip
 ./scripts/gen-icons.py        # перегенерировать иконки
 ./tunnel/build.sh --all       # туннель под linux/mac/windows
 ```
