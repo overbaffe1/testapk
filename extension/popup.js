@@ -1,4 +1,4 @@
-import { parseSubscription } from "./lib/subscribe.js";
+import { extractSubscriptionJsonUrl, parseSubscription } from "./lib/subscribe.js";
 
 const $ = (id) => document.getElementById(id);
 const ui = {
@@ -87,23 +87,48 @@ async function refresh() {
   }
 }
 
+async function fetchSubscriptionText(url) {
+  const response = await fetch(url, {
+    cache: "no-store",
+    headers: { Accept: "application/json, text/plain, */*" },
+  });
+  if (!response.ok) throw new Error(`Сервер подписки ответил HTTP ${response.status}`);
+  return response.text();
+}
+
 async function loadProfile(source) {
   let payload = source;
+  let parsed;
   if (/^https?:\/\//i.test(source)) {
     const url = new URL(source);
     const granted = await chrome.permissions.request({ origins: [`${url.origin}/*`] });
     if (!granted) throw new Error("Разреши доступ к серверу подписки");
 
     message("Загружаю подписку…");
-    const response = await fetch(url.href, {
-      cache: "no-store",
-      headers: { Accept: "application/json, text/plain, */*" },
-    });
-    if (!response.ok) throw new Error(`Сервер подписки ответил HTTP ${response.status}`);
-    payload = await response.text();
+    payload = await fetchSubscriptionText(url.href);
+    parsed = parseSubscription(payload);
+
+    // URL без ?format=qwdtt может открыть обычную HTML-страницу 3x-ui.
+    // Сначала парсер пробует конфигурацию, встроенную в textarea. Если в
+    // исходном HTML её нет (страница заполняется JS), загружаем JSON endpoint.
+    if (!parsed.ok && parsed.kind === "html") {
+      let jsonUrl = extractSubscriptionJsonUrl(payload, url.href);
+      if (!jsonUrl) {
+        const fallback = new URL(url.href);
+        fallback.searchParams.set("format", "qwdtt");
+        jsonUrl = fallback.href;
+      }
+      const target = new URL(jsonUrl);
+      if (target.origin === url.origin && target.href !== url.href) {
+        message("Загружаю конфигурацию qWDTT…");
+        payload = await fetchSubscriptionText(target.href);
+        parsed = parseSubscription(payload);
+      }
+    }
+  } else {
+    parsed = parseSubscription(payload);
   }
 
-  const parsed = parseSubscription(payload);
   if (!parsed.ok) throw new Error(parsed.error);
   await send("setProfile", { profile: parsed.profiles[0], source });
   return parsed.profiles[0];

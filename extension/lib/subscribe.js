@@ -256,6 +256,62 @@ export function tryBase64Decode(text) {
   }
 }
 
+/** Декодирует минимальный набор HTML entities из атрибутов и textarea. */
+function decodeHtmlEntities(value) {
+  const decodeCodePoint = (whole, code, radix) => {
+    const point = Number.parseInt(code, radix);
+    return Number.isInteger(point) && point >= 0 && point <= 0x10ffff ? String.fromCodePoint(point) : whole;
+  };
+  return String(value ?? "")
+    .replace(/&#x([0-9a-f]+);?/gi, (whole, code) => decodeCodePoint(whole, code, 16))
+    .replace(/&#(\d+);?/g, (whole, code) => decodeCodePoint(whole, code, 10))
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;|&#39;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">");
+}
+
+/** Извлекает WDTT/qWDTT-ссылки из HTML-страницы информации о подписке. */
+export function extractSubscriptionLinksFromHtml(html) {
+  const text = String(html ?? "");
+  const links = [];
+  const add = (value) => {
+    const link = decodeHtmlEntities(value).trim();
+    if (/^(?:q?wdtt):\/\//i.test(link) && !links.includes(link)) links.push(link);
+  };
+
+  // На страницах 3x-ui ссылки находятся в скрытом textarea. Сначала берём
+  // именно его, чтобы не спутать конфигурацию с примерами из скриптов.
+  const textareaRe = /<textarea\b([^>]*)>([\s\S]*?)<\/textarea\s*>/gi;
+  for (const match of text.matchAll(textareaRe)) {
+    if (!/\bid\s*=\s*(["'])subscription-links\1/i.test(match[1])) continue;
+    for (const line of decodeHtmlEntities(match[2]).split(/\r?\n/)) add(line);
+  }
+
+  // Резерв для страниц другой версии, где ссылки выведены только в div.
+  const decoded = decodeHtmlEntities(text);
+  for (const match of decoded.matchAll(/\b(?:q?wdtt):\/\/[^\s<>"']+/gi)) add(match[0]);
+  return links;
+}
+
+/** Находит qWDTT JSON endpoint в HTML страницы подписки. */
+export function extractSubscriptionJsonUrl(html, baseUrl = "") {
+  const text = String(html ?? "");
+  const attr = text.match(/\bdata-subjson-url\s*=\s*(["'])(.*?)\1/i);
+  let candidate = attr ? decodeHtmlEntities(attr[2]).trim() : "";
+  if (!candidate) {
+    const decoded = decodeHtmlEntities(text);
+    candidate = decoded.match(/https?:\/\/[^\s<>"']*[?&]format=qwdtt(?:[&#][^\s<>"']*)?/i)?.[0] || "";
+  }
+  if (!candidate) return "";
+  try {
+    return new URL(candidate, baseUrl || undefined).href;
+  } catch {
+    return "";
+  }
+}
+
 /**
  * Основной парсер: принимает любой поддерживаемый формат.
  * @returns {{ok:true, profiles:Profile[], kind:string, source:string}|{ok:false, error:string, kind:string}}
@@ -263,6 +319,18 @@ export function tryBase64Decode(text) {
 export function parseSubscription(raw) {
   const text = String(raw ?? "").trim();
   if (!text) return { ok: false, error: "Пустая подписка", kind: "empty" };
+
+  if (/^(?:<!doctype\s+html|<html\b)/i.test(text)) {
+    for (const link of extractSubscriptionLinksFromHtml(text)) {
+      const nested = parseSubscription(link);
+      if (nested.ok) return { ...nested, kind: `${nested.kind}+html`, source: text };
+    }
+    return {
+      ok: false,
+      error: "HTML-страница подписки не содержит распознаваемой WDTT-конфигурации",
+      kind: "html",
+    };
+  }
 
   if (/^https?:\/\//i.test(text)) {
     return { ok: false, error: "Это HTTP-ссылка — загрузите её кнопкой «Загрузить по URL»", kind: "url" };

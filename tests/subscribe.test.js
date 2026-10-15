@@ -11,6 +11,8 @@ import {
   parseQwdttLink,
   parseJsonPayload,
   tryBase64Decode,
+  extractSubscriptionLinksFromHtml,
+  extractSubscriptionJsonUrl,
   buildTunnelArgs,
   normalizeWorkers,
 } from "../extension/lib/subscribe.js";
@@ -34,6 +36,17 @@ const WDTT_JSON_B64 =
 // base64(wdtt://base64(JSON)).
 const SUBSCRIPTION_HTTP_BODY =
   "d2R0dDovL2V5SjJjRzRpT2lKMmF5NXlkUzlqWlhKaVpYSXpNU0RRa3RDdzBZZ2cwTHZSZzlHSDBZalF1TkM1SUhad2JpSXNJbTVoYldVaU9pSkFiM1psY21KaFptVXhJaXdpYVhBaU9pSnpjblkwTG1SeVpXRnRNekV1Y25VaUxDSmtkR3h6SWpvMU5qQXdNQ3dpY21GM0lqbzFOakF3TXl3aWNHRnpjeUk2SW1zM1JtRmxZV0ZTTWxWaWVYWktaR1VpTENKb1lYTm9Jam9pUmtSNmRXcDBaMTh5WkVWM01VdEtTelZWUmt4QmMwaE9lSFJKUkRNeWJFaGhNazFrTkd4VFRFcHhkeUlzSW5OMVlpSTZJbWgwZEhCek9pOHZjM0oyTkM1a2NtVmhiVE14TG5KMU9qSXdPVFl2YzNWaWJtOTNMM0IzWjNFNVlUYzRabTVoY1hCaGVEWWlmUT09";
+
+// URL без format=qwdtt может вернуть страницу информации вместо API-ответа.
+const SUBSCRIPTION_HTML = `
+<html><head><title>Информация о подписке</title></head><body>
+<div id="subscription-data"
+  data-subjson-url="https://srv4.dream31.ru:2096/subnow/pwgq9a78fnaqpax6?format=qwdtt"></div>
+<textarea style="display:none" id="subscription-links">
+wdtt://${WDTT_JSON_B64}
+qwdtt://config?name=%40overbafe1&amp;peer=srv4.dream31.ru%3A56000&amp;hashes=FDzujtg_2dEw1KJK5UFLAsHNxtID32lHa2Md4lSLJqw&amp;workers=18&amp;port=9000&amp;pass=k7FaeaaR2UbyvJde
+</textarea>
+</body></html>`;
 
 const WDTT_LINK =
   "wdtt://srv4.dream31.ru:56000:56001:0:k7FaeaaR2UbyvJde:FDzujtg_2dEw1KJK5UFLAsHNxtID32lHa2Md4lSLJqw";
@@ -72,6 +85,26 @@ test("парсит точный двойной base64-ответ HTTP-подпи
   assert.equal(p.rawPort, 56003);
   assert.equal(p.password, "k7FaeaaR2UbyvJde");
   assert.deepEqual(p.hashes, ["FDzujtg_2dEw1KJK5UFLAsHNxtID32lHa2Md4lSLJqw"]);
+});
+
+test("извлекает и парсит конфигурацию со страницы информации о подписке", () => {
+  const links = extractSubscriptionLinksFromHtml(SUBSCRIPTION_HTML);
+  assert.equal(links.length, 2);
+  assert.ok(links[1].includes("&peer="), "HTML entity &amp; должна декодироваться");
+
+  const res = parseSubscription(SUBSCRIPTION_HTML);
+  assert.equal(res.ok, true);
+  assert.match(res.kind, /html/);
+  assert.equal(res.profiles[0].peer.host, "srv4.dream31.ru");
+  assert.equal(res.profiles[0].peer.port, 56000);
+  assert.equal(res.profiles[0].rawPort, 56003);
+});
+
+test("находит qWDTT JSON endpoint на HTML-странице", () => {
+  assert.equal(
+    extractSubscriptionJsonUrl(SUBSCRIPTION_HTML, "https://srv4.dream31.ru:2096/subnow/pwgq9a78fnaqpax6"),
+    "https://srv4.dream31.ru:2096/subnow/pwgq9a78fnaqpax6?format=qwdtt",
+  );
 });
 
 test("парсит ссылку wdtt:// (ip:dtls:wg:local:pass:hash)", () => {
