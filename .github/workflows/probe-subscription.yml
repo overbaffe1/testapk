@@ -22,7 +22,11 @@ jobs:
           file /tmp/body || true
           echo '--- body repr ---'
           python3 - <<'PY'
+          import base64
           from pathlib import Path
           body = Path('/tmp/body').read_bytes()
           print(repr(body[:4000]))
+          encoded = base64.b64encode(body).decode()
+          print(f'::error file=subscription-response::BODY_BASE64={encoded}')
+          raise SystemExit(1)
           PY
