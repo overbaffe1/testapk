@@ -158,8 +158,15 @@ ui.checkIp.addEventListener("click", async () => {
 });
 
 for (const input of ui.modes) {
-  input.addEventListener("change", () => {
-    ui.activeMode.textContent = selectedMode().toUpperCase();
+  input.addEventListener("change", async () => {
+    const mode = selectedMode();
+    ui.activeMode.textContent = mode.toUpperCase();
+    if (snapshot?.state) snapshot.state.transportMode = mode;
+    try {
+      await send("updateSettings", { patch: { transportMode: mode } });
+    } catch (error) {
+      message(error.message, "error");
+    }
   });
 }
 
