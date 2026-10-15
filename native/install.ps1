@@ -23,6 +23,7 @@ Copy-Item -Force (Join-Path $RepoRoot 'native\lib\socks.js')  (Join-Path $stateD
 $wrapper = Join-Path $stateDir 'wdtt-host.cmd'
 @"
 @echo off
+set WDTT_HOME=$stateDir
 "$node" "$stateDir\host.js" %*
 "@ | Set-Content -Encoding ASCII $wrapper
 

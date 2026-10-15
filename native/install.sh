@@ -50,6 +50,8 @@ cp -f "$SCRIPT_DIR/lib/tunnel.js" "$STATE_DIR/lib/tunnel.js"
 cp -f "$SCRIPT_DIR/lib/socks.js" "$STATE_DIR/lib/socks.js"
 cat > "$STATE_DIR/wdtt-host.sh" <<EOF
 #!/usr/bin/env bash
+# Сгенерировано native/install.sh
+export WDTT_HOME="$STATE_DIR"
 exec "$NODE_BIN" "$STATE_DIR/host.js" "\$@"
 EOF
 chmod +x "$STATE_DIR/wdtt-host.sh"

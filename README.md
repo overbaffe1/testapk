@@ -23,7 +23,9 @@ Chrome  ──SOCKS5──▶  wdtt-tunnel (локальный)  ──UDP/WRAP�
    ./tunnel/build.sh
    ```
 
-   Готовый бинарник: `tunnel/bin/wdtt-tunnel`.
+   Готовый бинарник: `tunnel/bin/wdtt-tunnel` (хост также ищет его в
+   `~/.wdtt-tunnel/bin/` и в `$PATH`). Если Go нет — заберите бинарник из
+   артефактов CI: Actions → build-tunnel (linux/mac/windows).
 
 2. **Загрузите расширение в Chrome**: `chrome://extensions` → включите **«Режим разработчика»** →
    **«Загрузить распакованное расширение»** → выберите папку `extension/` из этого репозитория
