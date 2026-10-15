@@ -1,8 +1,9 @@
 # Установка qWDTT-компонента для Chrome в Windows (без Node.js и Go).
-# powershell -ExecutionPolicy Bypass -File .\native\install.ps1 -ExtensionId abcdefghijklmnopabcdefghijklmnop
+# Резервный ручной способ; обычно достаточно GUI-файла qwdtt-setup.exe.
+# powershell -ExecutionPolicy Bypass -File .\native\install.ps1
 
 param(
-  [Parameter(Mandatory = $true)][ValidatePattern('^[a-p]{32}$')][string]$ExtensionId,
+  [ValidatePattern('^[a-p]{32}$')][string]$ExtensionId = 'innpafjoibpjdgdemphggiomjlppglgj',
   [string]$RepoRoot = (Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path))
 )
 

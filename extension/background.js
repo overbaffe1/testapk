@@ -141,7 +141,7 @@ async function connect() {
   } catch (err) {
     const message = String(err?.message || err);
     const friendly = /native messaging|not found|хост/i.test(message)
-      ? "Компонент qWDTT для компьютера не установлен. Один раз запустите install.cmd из полного пакета и перезапустите Chrome."
+      ? "Компонент qWDTT не установлен. Один раз запустите qwdtt-setup.exe из полного пакета и перезапустите Chrome."
       : message;
     state = await patchState({ lastError: friendly });
     await updateBadge();

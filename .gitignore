@@ -1,5 +1,6 @@
 # Сборки и артефакты
 tunnel/bin/
+installer-go/assets/*.exe
 node_modules/
 
 # Готовый пакет расширения коммитим (dist/*.zip), остальное — нет

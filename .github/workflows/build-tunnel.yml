@@ -58,6 +58,21 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
         run: go build -trimpath -ldflags "-s -w" -o "../tunnel/bin/wdtt-native-host-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}" .
 
+      - name: Build no-admin Windows installer
+        if: matrix.goos == 'windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force installer-go/assets | Out-Null
+          Copy-Item tunnel/bin/wdtt-tunnel-windows-amd64.exe installer-go/assets/wdtt-tunnel.exe
+          Copy-Item tunnel/bin/wdtt-native-host-windows-amd64.exe installer-go/assets/wdtt-native-host.exe
+          Push-Location installer-go
+          try {
+            go mod tidy
+            go build -trimpath -ldflags '-s -w -H=windowsgui' -o ../tunnel/bin/qwdtt-setup.exe .
+          } finally {
+            Pop-Location
+          }
+
       - uses: actions/upload-artifact@v4
         with:
           name: qwdtt-${{ matrix.goos }}-${{ matrix.goarch }}
@@ -76,6 +91,7 @@ jobs:
           Copy-Item native/install.cmd, native/install.ps1 "$bundle/native/"
           Copy-Item tunnel/bin/wdtt-tunnel-windows-amd64.exe "$bundle/bin/wdtt-tunnel.exe"
           Copy-Item tunnel/bin/wdtt-native-host-windows-amd64.exe "$bundle/bin/wdtt-native-host.exe"
+          Copy-Item tunnel/bin/qwdtt-setup.exe "$bundle/qwdtt-setup.exe"
           Copy-Item WINDOWS.md "$bundle/README.txt"
           New-Item -ItemType Directory -Force dist | Out-Null
           if (Test-Path dist/qwdtt-windows-x64.zip) { Remove-Item dist/qwdtt-windows-x64.zip }
