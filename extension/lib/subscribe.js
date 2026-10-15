@@ -38,7 +38,7 @@ const VK_HASH_RE = /^[A-Za-z0-9_-]{6,}$/;
 /** @typedef {{host:string, port:number}} Peer */
 /**
  * @typedef {{
- *   name:string, peer:Peer, hashes:string[], workers:number,
+ *   name:string, peer:Peer, rawPort:number, hashes:string[], workers:number,
  *   listenPort:number, password:string, source:string
  * }} Profile */
 
@@ -132,10 +132,12 @@ function profileFromObject(obj, fallbackName = "WDTT") {
   const password = firstString(obj, ["password", "pass", "passwd", "secret"]);
   const workers = normalizeWorkers(firstNumber(obj, ["workers", "workersPerHash", "threads"], DEFAULT_WORKERS));
   const listenPort = firstNumber(obj, ["port_local", "listenPort", "localPort"], 0);
+  const rawPort = firstNumber(obj, ["raw", "raw_port", "rawPort"], 0);
 
   return {
     name,
     peer,
+    rawPort,
     hashes,
     workers,
     // listenPort из qWDTT-ссылки — это локальный UDP-порт клиента,
@@ -163,6 +165,7 @@ export function parseLegacyLink(text) {
   return {
     name: `WDTT ${host}`,
     peer: { host, port: dtlsPort },
+    rawPort: 0,
     hashes: parseHashes(hash),
     workers: DEFAULT_WORKERS,
     listenPort: Number.isFinite(localPort) && localPort > 0 ? localPort : DEFAULT_LISTEN_PORT,
@@ -195,9 +198,11 @@ export function parseQwdttLink(text) {
   if (!hashes.length) return null;
 
   const localPort = Number.parseInt(q.get("port") || "", 10);
+  const rawPort = Number.parseInt(q.get("raw") || q.get("raw_port") || "", 10);
   return {
     name: q.get("name") || "qWDTT",
     peer,
+    rawPort: Number.isFinite(rawPort) ? rawPort : 0,
     hashes,
     workers: normalizeWorkers(q.get("workers")),
     listenPort: Number.isFinite(localPort) && localPort > 0 ? localPort : DEFAULT_LISTEN_PORT,
@@ -301,7 +306,8 @@ export function parseSubscription(raw) {
  * Строит аргументы командной строки для нативного туннеля (Go-клиент WDTT).
  * @param {Profile} profile
  * @param {{socksHost?:string, socksPort?:number, deviceId?:string, goDns?:string,
- *          obfs?:string, captchaMode?:string, vkAuthMode?:string, listenHost?:string}} opts
+ *          obfs?:string, captchaMode?:string, vkAuthMode?:string, listenHost?:string,
+ *          transportMode?:"raw"|"wg"|"socks5"}} opts
  */
 export function buildTunnelArgs(profile, opts = {}) {
   const {
@@ -314,12 +320,18 @@ export function buildTunnelArgs(profile, opts = {}) {
     vkAuthMode = "anonymous",
     listenHost = "127.0.0.1",
     workers = 0,
+    transportMode = "socks5",
   } = opts;
 
   const hashes = parseHashes(profile.hashes).filter((h) => VK_HASH_RE.test(h) || h.length > 0);
   const workerCount = workers > 0 ? normalizeWorkers(workers) : normalizeWorkers(profile.workers);
+  const rawSelected = transportMode === "raw";
+  if (rawSelected && !profile.rawPort) {
+    throw new Error("В подписке нет RAW-порта сервера");
+  }
+  const peerPort = rawSelected ? profile.rawPort : profile.peer.port;
   const args = [
-    "-peer", `${profile.peer.host}:${profile.peer.port}`,
+    "-peer", `${profile.peer.host}:${peerPort}`,
     "-vk", hashes.join(","),
     "-n", String(workerCount),
     "-listen", `${listenHost}:${profile.listenPort || DEFAULT_LISTEN_PORT}`,
@@ -329,7 +341,7 @@ export function buildTunnelArgs(profile, opts = {}) {
     "-vk-auth", vkAuthMode,
     "-go-dns", goDns,
     "-obfs", obfs,
-    "-mode", "socks",
+    "-mode", rawSelected ? "rawsocks" : "socks",
     "-socks", `${socksHost}:${socksPort}`,
   ];
   return args;

@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -46,6 +47,14 @@ func getCaptchaMode() string {
 		return "auto"
 	}
 	return mode
+}
+
+func mustAtoiOr(value string, fallback int) int {
+	n, err := strconv.Atoi(strings.TrimSpace(value))
+	if err != nil {
+		return fallback
+	}
+	return n
 }
 
 // drainCaptchaResult удаляет устаревший результат капчи из канала
@@ -177,7 +186,7 @@ func main() {
 	goDNS := flag.String("go-dns", "yandex", "DNS для VK (yandex/cloudflare/google, doh-yandex/doh-cloudflare/doh-google, custom:IP или doh:URL)")
 	obfsMode := flag.String("obfs", "audio", "режим обфускации (audio/video)")
 	checkHashes := flag.Bool("check-hashes", false, "проверить VK-хеши и выйти")
-	connMode := flag.String("mode", "vpn", "режим клиента (vpn|socks|rawtun)")
+	connMode := flag.String("mode", "vpn", "режим клиента (vpn|socks|rawtun|rawsocks)")
 	socksAddr := flag.String("socks", "127.0.0.1:1080", "локальный SOCKS5 (только -mode socks)")
 	socksAuth := flag.Bool("socks-auth", false, "требовать логин и пароль SOCKS5")
 	socksUser := flag.String("socks-user", "", "логин SOCKS5")
@@ -188,10 +197,10 @@ func main() {
 
 	flag.Parse()
 	activeConnMode := strings.ToLower(strings.TrimSpace(*connMode))
-	if activeConnMode != "socks" && activeConnMode != "rawtun" {
+	if activeConnMode != "socks" && activeConnMode != "rawtun" && activeConnMode != "rawsocks" {
 		activeConnMode = "vpn"
 	}
-	if activeConnMode == "socks" && *socksAuth {
+	if (activeConnMode == "socks" || activeConnMode == "rawsocks") && *socksAuth {
 		if *socksUser == "" || *socksPass == "" {
 			log.Fatal("[SOCKS] Для авторизации нужны логин и пароль")
 		}
@@ -278,7 +287,7 @@ func main() {
 		WrapKey:      wrapKey,
 		ObfsMode:     normalizeObfsMode(*obfsMode),
 		NoDTLS:       *noDTLS,
-		RawMode:      activeConnMode == "rawtun",
+		RawMode:      activeConnMode == "rawtun" || activeConnMode == "rawsocks",
 		TCPTransport: *turnTCP,
 	}
 
@@ -348,7 +357,7 @@ func main() {
 		log.Printf("[КЛИЕНТ] TURN-транспорт: UDP")
 	}
 	log.Printf("[КЛИЕНТ] Режим: %s", activeConnMode)
-	if activeConnMode == "socks" {
+	if activeConnMode == "socks" || activeConnMode == "rawsocks" {
 		log.Printf("[КЛИЕНТ] SOCKS5: %s", *socksAddr)
 		if *socksAuth {
 			log.Printf("[КЛИЕНТ] SOCKS5: авторизация по логину и паролю включена")
@@ -369,7 +378,7 @@ func main() {
 	go stats.RunLoop(shutdownCh)
 
 	var disp *Dispatcher
-	if activeConnMode == "rawtun" {
+	if activeConnMode == "rawtun" || activeConnMode == "rawsocks" {
 		disp = NewDispatcherPendingTUN(ctx, stats)
 	} else {
 		disp = NewDispatcher(ctx, localConn, stats)
@@ -399,6 +408,20 @@ func main() {
 				fmt.Printf("║ %-40s ║\n", fmt.Sprintf("DNS = %s", dnsCSV))
 				fmt.Printf("║ %-40s ║\n", fmt.Sprintf("MTU = %s", mtuStr))
 				fmt.Println("╚══════════════════════════════════════╝")
+
+				if activeConnMode == "rawsocks" {
+					tunIO, tnet, stackErr := startRawNetstack(ip, dnsCSV, mustAtoiOr(mtuStr, 1280))
+					if stackErr != nil {
+						log.Printf("[RAW-SOCKS] Ошибка userspace netstack: %v", stackErr)
+						return
+					}
+					disp.AttachTUN(tunIO)
+					log.Printf("[RAW-SOCKS] Userspace IP-стек поднят (addr=%s, mtu=%s)", ip, mtuStr)
+					if err := runSocks5Server(ctx, *socksAddr, tnet, *socksAuth, *socksUser, *socksPass); err != nil {
+						log.Printf("[RAW-SOCKS] Сервер остановлен: %v", err)
+					}
+					return
+				}
 
 				if *tunFdSock == "" {
 					log.Println("[RAW] Ошибка: -tun-fd-sock не указан")

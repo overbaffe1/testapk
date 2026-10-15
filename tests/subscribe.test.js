@@ -42,6 +42,7 @@ test("парсит qWDTT JSON (ip/port/pass/hash)", () => {
   const p = res.profiles[0];
   assert.equal(p.peer.host, "srv4.dream31.ru");
   assert.equal(p.peer.port, 56000);
+  assert.equal(p.rawPort, 56003);
   assert.equal(p.password, "k7FaeaaR2UbyvJde");
   assert.deepEqual(p.hashes, ["FDzujtg_2dEw1KJK5UFLAsHNxtID32lHa2Md4lSLJqw"]);
   assert.equal(p.name, "@overbafe1");
@@ -134,6 +135,18 @@ test("собирает аргументы туннеля", () => {
   assert.equal(args[args.indexOf("-peer") + 1], "srv4.dream31.ru:56000");
   assert.equal(args[args.indexOf("-password") + 1], "k7FaeaaR2UbyvJde");
   assert.equal(args[args.indexOf("-vk") + 1], "FDzujtg_2dEw1KJK5UFLAsHNxtID32lHa2Md4lSLJqw");
+});
+
+test("RAW использует raw-порт и userspace SOCKS", () => {
+  const res = parseSubscription(QWDTT_JSON);
+  const args = buildTunnelArgs(res.profiles[0], { transportMode: "raw", socksPort: 1080 });
+  assert.equal(args[args.indexOf("-mode") + 1], "rawsocks");
+  assert.equal(args[args.indexOf("-peer") + 1], "srv4.dream31.ru:56003");
+});
+
+test("RAW отклоняется, если подписка не содержит raw-порт", () => {
+  const res = parseSubscription(WDTT_LINK);
+  assert.throws(() => buildTunnelArgs(res.profiles[0], { transportMode: "raw" }), /RAW-порта/);
 });
 
 test("легаси-ссылка без схемы", () => {

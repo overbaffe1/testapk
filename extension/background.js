@@ -80,6 +80,7 @@ function buildStartPayload(state) {
     captchaMode: state.tunnel.captchaMode,
     vkAuthMode: state.tunnel.vkAuthMode,
     workers: Number(state.tunnel.workers) || 0,
+    transportMode: state.transportMode || "socks5",
   });
 
   return {
@@ -140,7 +141,7 @@ async function connect() {
   } catch (err) {
     const message = String(err?.message || err);
     const friendly = /native messaging|not found|хост/i.test(message)
-      ? "Нативный хост не установлен. Выполните native/install.sh (см. инструкцию) или переключитесь в режим «Внешний SOCKS5»."
+      ? "Компонент qWDTT для компьютера не установлен. Один раз запустите install.cmd из полного пакета и перезапустите Chrome."
       : message;
     state = await patchState({ lastError: friendly });
     await updateBadge();
@@ -222,10 +223,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
 // ─────────────────────────── автозапуск и опрос ───────────────────────────
 
-chrome.runtime.onInstalled.addListener(async (details) => {
-  if (details.reason === "install") {
-    await chrome.tabs.create({ url: chrome.runtime.getURL("options.html#welcome") });
-  }
+chrome.runtime.onInstalled.addListener(async () => {
   await updateBadge();
 });
 

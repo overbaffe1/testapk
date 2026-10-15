@@ -19,11 +19,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-latest, goos: linux, goarch: amd64 }
-          - { os: ubuntu-latest, goos: linux, goarch: arm64 }
-          - { os: macos-latest, goos: darwin, goarch: amd64 }
-          - { os: macos-latest, goos: darwin, goarch: arm64 }
-          - { os: windows-latest, goos: windows, goarch: amd64 }
+          - { os: ubuntu-latest, goos: linux, goarch: amd64, ext: "" }
+          - { os: ubuntu-latest, goos: linux, goarch: arm64, ext: "" }
+          - { os: macos-latest, goos: darwin, goarch: amd64, ext: "" }
+          - { os: macos-latest, goos: darwin, goarch: arm64, ext: "" }
+          - { os: windows-latest, goos: windows, goarch: amd64, ext: ".exe" }
 
     steps:
       - uses: actions/checkout@v4
@@ -37,16 +37,26 @@ jobs:
         working-directory: tunnel/src
         run: go mod tidy
 
-      - name: Build
+      - name: Build tunnel
         working-directory: tunnel/src
         env:
           CGO_ENABLED: "0"
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-        run: go build -trimpath -ldflags "-s -w" -o "../bin/wdtt-tunnel-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goos == 'windows' && '.exe' || '' }}" .
+        run: go build -trimpath -ldflags "-s -w" -o "../bin/wdtt-tunnel-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}" .
+
+      - name: Build native messaging host
+        working-directory: native-go
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: go build -trimpath -ldflags "-s -w" -o "../tunnel/bin/wdtt-native-host-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}" .
 
       - uses: actions/upload-artifact@v4
         with:
-          name: wdtt-tunnel-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: tunnel/bin/wdtt-tunnel-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goos == 'windows' && '.exe' || '' }}
+          name: qwdtt-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            tunnel/bin/wdtt-tunnel-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
+            tunnel/bin/wdtt-native-host-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
           if-no-files-found: error

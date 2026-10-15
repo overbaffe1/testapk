@@ -2,9 +2,9 @@ package main
 
 import (
 	"context"
+	"io"
 	"log"
 	"net"
-	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -88,7 +88,7 @@ type WorkerSlot struct {
 
 type Dispatcher struct {
 	localConn    net.PacketConn
-	tunFile      *os.File // не nil в -mode rawtun: сырые IP-пакеты вместо локального WG-loopback
+	tunIO        io.ReadWriteCloser // не nil в raw-режимах: сырые IP-пакеты вместо локального WG-loopback
 	ready        chan struct{}
 	clientAddr   atomic.Pointer[net.Addr]
 	mu           sync.Mutex
@@ -158,15 +158,19 @@ func NewDispatcherPendingTUN(ctx context.Context, stats *Stats) *Dispatcher {
 	return d
 }
 
-// AttachTUN подключает полученный от Android TUN-fd к уже запущенному
-// диспетчеру и снимает блокировку с readLoop/writeLoop.
-func (d *Dispatcher) AttachTUN(f *os.File) {
-	d.tunFile = f
+// AttachTUN подключает TUN-поток к уже запущенному диспетчеру и снимает
+// блокировку с readLoop/writeLoop. Это может быть Android TUN fd или
+// userspace netstack для RAW→SOCKS режима настольного клиента.
+func (d *Dispatcher) AttachTUN(rw io.ReadWriteCloser) {
+	d.tunIO = rw
 	close(d.ready)
 }
 
 func (d *Dispatcher) Shutdown() {
 	d.cancel()
+	if d.tunIO != nil {
+		_ = d.tunIO.Close()
+	}
 	d.wg.Wait()
 }
 
@@ -218,8 +222,8 @@ func (d *Dispatcher) readLoop() {
 		return
 	case <-d.ready:
 	}
-	if d.tunFile != nil {
-		rawDiagf("readLoop: разблокирован, начинаю читать из tunFile (fd=%v)", d.tunFile.Fd())
+	if d.tunIO != nil {
+		rawDiagf("readLoop: разблокирован, начинаю читать из TUN")
 	}
 
 	buf := make([]byte, readBufSize)
@@ -231,8 +235,8 @@ func (d *Dispatcher) readLoop() {
 		var n int
 		var addr net.Addr
 		var err error
-		if d.tunFile != nil {
-			n, err = d.tunFile.Read(buf)
+		if d.tunIO != nil {
+			n, err = d.tunIO.Read(buf)
 		} else {
 			n, addr, err = d.localConn.ReadFrom(buf)
 		}
@@ -242,8 +246,8 @@ func (d *Dispatcher) readLoop() {
 			}
 			if atomic.CompareAndSwapUint32(&d.firstReadErr, 0, 1) {
 				src := "localConn"
-				if d.tunFile != nil {
-					src = "tunFile"
+				if d.tunIO != nil {
+					src = "tunIO"
 				}
 				rawDiagf("readLoop: первая ошибка чтения из %s: %v", src, err)
 			}
@@ -251,12 +255,12 @@ func (d *Dispatcher) readLoop() {
 			continue
 		}
 
-		if d.tunFile == nil {
+		if d.tunIO == nil {
 			d.clientAddr.Store(&addr)
 		}
 		d.stats.TotalBytesUp.Add(int64(n))
 
-		if d.tunFile != nil {
+		if d.tunIO != nil {
 			c := atomic.AddUint64(&d.tunReadCount, 1)
 			if c%200 == 0 {
 				rawDiagf("readLoop: прочитано из TUN=%d отправлено=%d дропнуто=%d",
@@ -265,7 +269,7 @@ func (d *Dispatcher) readLoop() {
 		}
 
 		if atomic.CompareAndSwapUint32(&d.firstPktUp, 0, 1) {
-			if d.tunFile != nil {
+			if d.tunIO != nil {
 				log.Printf("[ДИСП] [ДЕБАГ] Получен ПЕРВЫЙ пакет от TUN (%d байт)", n)
 			} else {
 				log.Printf("[ДИСП] [ДЕБАГ] Получен ПЕРВЫЙ пакет от локального WireGuard (%d байт) с адреса %s", n, addr.String())
@@ -318,7 +322,7 @@ func (d *Dispatcher) readLoop() {
 				}
 			}
 			if sentPrio {
-				if d.tunFile != nil {
+				if d.tunIO != nil {
 					atomic.AddUint64(&d.tunSentCount, 1)
 				}
 				d.mu.Unlock()
@@ -372,7 +376,7 @@ func (d *Dispatcher) readLoop() {
 		}
 
 		if sent {
-			if d.tunFile != nil {
+			if d.tunIO != nil {
 				atomic.AddUint64(&d.tunSentCount, 1)
 			}
 		} else {
@@ -380,7 +384,7 @@ func (d *Dispatcher) readLoop() {
 			d.rrIndex = (idx + 1) % nw
 			d.rrCount = 0
 			putPktBuf(pkt)
-			if d.tunFile != nil {
+			if d.tunIO != nil {
 				c := atomic.AddUint64(&d.tunDroppedCount, 1)
 				if c == 1 || c%50 == 0 {
 					rawDiagf("readLoop: пакет из TUN ДРОПНУТ — все воркеры перегружены (дропнуто всего=%d)", c)
@@ -405,17 +409,17 @@ func (d *Dispatcher) writeLoop() {
 		case <-d.ctx.Done():
 			return
 		case pkt := <-d.ReturnCh:
-			if d.tunFile != nil {
+			if d.tunIO != nil {
 				if atomic.CompareAndSwapUint32(&d.firstPktDown, 0, 1) {
 					log.Printf("[ДИСП] [ДЕБАГ] Отправляем ПЕРВЫЙ пакет обратно в TUN (%d байт)", len(pkt))
 				}
-				if _, err := d.tunFile.Write(pkt); err != nil {
+				if _, err := d.tunIO.Write(pkt); err != nil {
 					if d.ctx.Err() != nil {
 						putPktBuf(pkt)
 						return
 					}
 					if atomic.CompareAndSwapUint32(&d.firstWriteErr, 0, 1) {
-						rawDiagf("writeLoop: первая ошибка записи в tunFile: %v", err)
+						rawDiagf("writeLoop: первая ошибка записи в tunIO: %v", err)
 					}
 				}
 				d.stats.TotalBytesDown.Add(int64(len(pkt)))

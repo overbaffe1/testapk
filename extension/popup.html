@@ -6,61 +6,41 @@
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
-    <header class="head">
+    <header>
       <div class="brand">
         <span class="logo">q</span>
         <div>
-          <div class="title">qWDTT</div>
-          <div class="subtitle">туннель в браузер</div>
+          <strong>qWDTT</strong>
+          <small>туннель для Chrome</small>
         </div>
       </div>
-      <div id="statusPill" class="pill pill-off">выключено</div>
+      <div id="status" class="status off"><i></i><span>Отключено</span></div>
     </header>
 
     <main>
-      <button id="toggleBtn" class="toggle" type="button">
-        <span class="toggle-label">Подключить</span>
-        <span class="toggle-sub">весь трафик Chrome пойдёт через туннель</span>
-      </button>
+      <label class="caption" for="subscription">Ссылка на подписку</label>
+      <input id="subscription" class="subscription" type="url" spellcheck="false"
+             placeholder="https://server/subnow/…" />
 
-      <section class="card">
-        <div class="row"><span>Сервер</span><b id="srvValue">—</b></div>
-        <div class="row"><span>Хеши VK</span><b id="hashValue">—</b></div>
-        <div class="row"><span>Потоков</span><b id="workersValue">—</b></div>
-        <div class="row"><span>SOCKS5</span><b id="socksValue">—</b></div>
-        <div class="row"><span>Туннель</span><b id="tunnelValue">—</b></div>
-        <div class="row"><span>Внешний IP</span><b id="ipValue">—</b></div>
-        <div class="row hidden" id="errorRow"><span>Ошибка</span><b id="errorValue" class="err">—</b></div>
+      <div class="caption mode-title">Режим</div>
+      <div class="modes" role="radiogroup" aria-label="Режим подключения">
+        <label><input type="radio" name="mode" value="raw" /><span>RAW</span></label>
+        <label><input type="radio" name="mode" value="wg" /><span>WG</span></label>
+        <label><input type="radio" name="mode" value="socks5" checked /><span>SOCKS5</span></label>
+      </div>
+
+      <button id="connect" class="connect" type="button">Подключить</button>
+
+      <section class="info">
+        <div><span>Сервер</span><b id="server">—</b></div>
+        <div><span>Режим</span><b id="activeMode">SOCKS5</b></div>
+        <div><span>Туннель</span><b id="tunnel">не запущен</b></div>
+        <div><span>Внешний IP</span><b id="ip">—</b></div>
       </section>
 
-      <section class="card">
-        <div class="card-title">
-          Подписка
-          <button id="pasteBtn" class="mini" type="button" title="Вставить из буфера">вставить</button>
-        </div>
-        <textarea id="subInput" spellcheck="false" placeholder="Вставьте сюда qWDTT JSON, wdtt:// или qwdtt://config ссылку"></textarea>
-        <div class="btns">
-          <button id="applyBtn" class="primary" type="button">Применить</button>
-          <button id="fetchBtn" type="button" title="Загрузить подписку по HTTP-ссылке">По URL</button>
-          <button id="checkIpBtn" type="button">Проверить IP</button>
-        </div>
-        <div id="parseNote" class="note"></div>
-      </section>
-
-      <section class="card">
-        <div class="card-title">
-          Лог туннеля
-          <button id="refreshLogsBtn" class="mini" type="button">обновить</button>
-        </div>
-        <pre id="logBox" class="log">—</pre>
-      </section>
+      <button id="checkIp" class="secondary" type="button">Проверить IP</button>
+      <p id="message" class="message"></p>
     </main>
-
-    <footer>
-      <button id="optionsBtn" class="link" type="button">Настройки</button>
-      <button id="helpBtn" class="link" type="button">Как подключить</button>
-      <span id="extId" class="extid" title="ID расширения"></span>
-    </footer>
 
     <script type="module" src="popup.js"></script>
   </body>
