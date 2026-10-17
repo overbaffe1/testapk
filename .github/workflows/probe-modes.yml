@@ -18,7 +18,9 @@ jobs:
           cache-dependency-path: tunnel/src/go.mod
       - name: Build tunnel
         working-directory: tunnel/src
-        run: go build -trimpath -o ../wdtt-probe .
+        run: |
+          go mod tidy
+          go build -trimpath -o ../wdtt-probe .
       - name: Probe WG and RAW through SOCKS5
         shell: bash
         run: |
