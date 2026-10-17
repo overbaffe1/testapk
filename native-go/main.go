@@ -308,7 +308,11 @@ func (a *app) start(payload startPayload) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	cmd := exec.Command(binaryPath, payload.Args...)
+	args := append([]string{}, payload.Args...)
+	if needsElevatedLog(args) && !hasArg(args, "-log-file") {
+		args = append(args, "-log-file", a.logPath)
+	}
+	cmd := exec.Command(binaryPath, args...)
 	cmd.Dir = a.home
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
@@ -323,7 +327,7 @@ func (a *app) start(payload startPayload) (map[string]any, error) {
 		PID:        cmd.Process.Pid,
 		StartedAt:  time.Now().UnixMilli(),
 		Binary:     binaryPath,
-		Args:       payload.Args,
+		Args:       args,
 		Socks:      payload.Socks,
 		SocksReady: false,
 	}
@@ -357,6 +361,28 @@ func (a *app) stop() map[string]any {
 	state.Error = ""
 	a.writeState(state)
 	return map[string]any{"stopped": stopped, "status": a.status()}
+}
+
+func hasArg(args []string, name string) bool {
+	for _, arg := range args {
+		if arg == name || strings.HasPrefix(arg, name+"=") {
+			return true
+		}
+	}
+	return false
+}
+
+func needsElevatedLog(args []string) bool {
+	for i, arg := range args {
+		if arg == "-mode" && i+1 < len(args) {
+			return args[i+1] == "wg" || args[i+1] == "rawsystem"
+		}
+		if strings.HasPrefix(arg, "-mode=") {
+			mode := strings.TrimPrefix(arg, "-mode=")
+			return mode == "wg" || mode == "rawsystem"
+		}
+	}
+	return false
 }
 
 func chooseInt(condition bool, yes, no int) int {

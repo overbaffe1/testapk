@@ -33,5 +33,7 @@ func terminatePID(pid int) error {
 	if pid <= 0 {
 		return nil
 	}
-	return exec.Command("taskkill", "/PID", strconv.Itoa(pid), "/T", "/F").Run()
+	// Не используем /T: в системных режимах этот PID является unelevated
+	// broker, а elevated tunnel сам завершится, увидев закрытие broker.
+	return exec.Command("taskkill", "/PID", strconv.Itoa(pid), "/F").Run()
 }

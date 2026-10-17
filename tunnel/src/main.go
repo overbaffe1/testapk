@@ -186,21 +186,39 @@ func main() {
 	goDNS := flag.String("go-dns", "yandex", "DNS для VK (yandex/cloudflare/google, doh-yandex/doh-cloudflare/doh-google, custom:IP или doh:URL)")
 	obfsMode := flag.String("obfs", "audio", "режим обфускации (audio/video)")
 	checkHashes := flag.Bool("check-hashes", false, "проверить VK-хеши и выйти")
-	connMode := flag.String("mode", "vpn", "режим клиента (vpn|socks|rawtun|rawsocks)")
-	socksAddr := flag.String("socks", "127.0.0.1:1080", "локальный SOCKS5 (только -mode socks)")
+	connMode := flag.String("mode", "vpn", "режим клиента (vpn|socks|wg|rawtun|rawsocks|rawsystem)")
+	socksAddr := flag.String("socks", "127.0.0.1:1080", "локальный SOCKS5")
 	socksAuth := flag.Bool("socks-auth", false, "требовать логин и пароль SOCKS5")
 	socksUser := flag.String("socks-user", "", "логин SOCKS5")
 	socksPass := flag.String("socks-pass", "", "пароль SOCKS5")
 	noDTLS := flag.Bool("notls", false, "прямой режим: RTP-obfs AEAD без DTLS поверх TURN (нужен сервер с -listen-direct)")
 	turnTCP := flag.Bool("turn-tcp", false, "соединяться с TURN-relay по TCP вместо UDP (обход UDP-душения на некоторых сетях, напр. Ростелеком)")
 	tunFdSock := flag.String("tun-fd-sock", "", "unix-сокет для получения TUN fd от Android (только -mode rawtun)")
+	systemBypass := flag.String("system-bypass", "", "домены split tunnel через физическую сеть (через запятую)")
+	logFilePath := flag.String("log-file", "", "дополнительно писать лог в файл")
+	elevatedChild := flag.Bool("elevated-child", false, "внутренний флаг запуска после UAC")
+	parentPID := flag.Int("parent-pid", 0, "внутренний PID процесса, запросившего UAC")
 
 	flag.Parse()
+	if *logFilePath != "" {
+		logFile, logErr := os.OpenFile(*logFilePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+		if logErr != nil {
+			log.Fatalf("[КЛИЕНТ] Не удалось открыть лог %s: %v", *logFilePath, logErr)
+		}
+		defer logFile.Close()
+		log.SetOutput(logFile)
+	}
+
 	activeConnMode := strings.ToLower(strings.TrimSpace(*connMode))
-	if activeConnMode != "socks" && activeConnMode != "rawtun" && activeConnMode != "rawsocks" {
+	if activeConnMode != "socks" && activeConnMode != "wg" && activeConnMode != "rawtun" && activeConnMode != "rawsocks" && activeConnMode != "rawsystem" {
 		activeConnMode = "vpn"
 	}
-	if (activeConnMode == "socks" || activeConnMode == "rawsocks") && *socksAuth {
+	if handled, elevateErr := ensureElevatedMode(activeConnMode, *elevatedChild, *parentPID, cancel); elevateErr != nil {
+		log.Fatalf("[СИСТЕМА] Не удалось получить права администратора: %v", elevateErr)
+	} else if handled {
+		return
+	}
+	if (activeConnMode == "socks" || activeConnMode == "wg" || activeConnMode == "rawsocks" || activeConnMode == "rawsystem") && *socksAuth {
 		if *socksUser == "" || *socksPass == "" {
 			log.Fatal("[SOCKS] Для авторизации нужны логин и пароль")
 		}
@@ -215,6 +233,14 @@ func main() {
 
 	if err := loadVkCredsFile(*vkCredsFile); err != nil {
 		log.Fatalf("[КЛИЕНТ] Ошибка чтения vk-creds-file: %v", err)
+	}
+
+	if activeConnMode == "wg" || activeConnMode == "rawsystem" {
+		cleanupRoutes, routeErr := prepareSystemRouting(splitCommaList(*systemBypass))
+		if routeErr != nil {
+			log.Fatalf("[СИСТЕМА] Подготовка маршрутов: %v", routeErr)
+		}
+		defer cleanupRoutes()
 	}
 
 	hashes := ParseHashes(*vkHash)
@@ -287,7 +313,7 @@ func main() {
 		WrapKey:      wrapKey,
 		ObfsMode:     normalizeObfsMode(*obfsMode),
 		NoDTLS:       *noDTLS,
-		RawMode:      activeConnMode == "rawtun" || activeConnMode == "rawsocks",
+		RawMode:      activeConnMode == "rawtun" || activeConnMode == "rawsocks" || activeConnMode == "rawsystem",
 		TCPTransport: *turnTCP,
 	}
 
@@ -357,7 +383,7 @@ func main() {
 		log.Printf("[КЛИЕНТ] TURN-транспорт: UDP")
 	}
 	log.Printf("[КЛИЕНТ] Режим: %s", activeConnMode)
-	if activeConnMode == "socks" || activeConnMode == "rawsocks" {
+	if activeConnMode == "socks" || activeConnMode == "wg" || activeConnMode == "rawsocks" || activeConnMode == "rawsystem" {
 		log.Printf("[КЛИЕНТ] SOCKS5: %s", *socksAddr)
 		if *socksAuth {
 			log.Printf("[КЛИЕНТ] SOCKS5: авторизация по логину и паролю включена")
@@ -378,7 +404,7 @@ func main() {
 	go stats.RunLoop(shutdownCh)
 
 	var disp *Dispatcher
-	if activeConnMode == "rawtun" || activeConnMode == "rawsocks" {
+	if activeConnMode == "rawtun" || activeConnMode == "rawsocks" || activeConnMode == "rawsystem" {
 		disp = NewDispatcherPendingTUN(ctx, stats)
 	} else {
 		disp = NewDispatcher(ctx, localConn, stats)
@@ -419,6 +445,21 @@ func main() {
 					log.Printf("[RAW-SOCKS] Userspace IP-стек поднят (addr=%s, mtu=%s)", ip, mtuStr)
 					if err := runSocks5Server(ctx, *socksAddr, tnet, *socksAuth, *socksUser, *socksPass); err != nil {
 						log.Printf("[RAW-SOCKS] Сервер остановлен: %v", err)
+					}
+					return
+				}
+
+				if activeConnMode == "rawsystem" {
+					tunDev, cleanupSystem, systemErr := startSystemRawTunnel(ip, dnsCSV, mustAtoiOr(mtuStr, 1280))
+					if systemErr != nil {
+						log.Printf("[RAW-SYSTEM] Ошибка системного TUN: %v", systemErr)
+						return
+					}
+					defer cleanupSystem()
+					disp.AttachTUN(&tunStreamAdapter{dev: tunDev})
+					log.Printf("[RAW-SYSTEM] Системный TUN поднят (addr=%s, mtu=%s)", ip, mtuStr)
+					if err := runSystemSocks5Server(ctx, *socksAddr, *socksAuth, *socksUser, *socksPass); err != nil {
+						log.Printf("[RAW-SYSTEM] SOCKS5 остановлен: %v", err)
 					}
 					return
 				}
@@ -464,12 +505,9 @@ func main() {
 				}
 				finalConf = strings.Join(newLines, "\n")
 			}
-			fmt.Println()
-			fmt.Println("╔══════════════ WireGuard Конфиг ══════════════╗")
-			for _, line := range strings.Split(finalConf, "\n") {
-				fmt.Printf("║ %-44s ║\n", line)
-			}
-			fmt.Println("╚══════════════════════════════════════════════╝")
+			// Не выводим приватный ключ в лог. Сам конфиг нужен только процессу
+			// и сохраняется с правами текущего пользователя для диагностики.
+			log.Println("[КОНФИГ] WireGuard-конфигурация получена")
 			if err := os.WriteFile("wg-turn.conf", []byte(finalConf+"\n"), 0600); err != nil {
 				log.Printf("[КОНФИГ] Ошибка сохранения: %v", err)
 			} else {
@@ -485,6 +523,21 @@ func main() {
 				defer dev.Close()
 				if err := runSocks5Server(ctx, *socksAddr, tnet, *socksAuth, *socksUser, *socksPass); err != nil {
 					log.Printf("[SOCKS] Сервер остановлен: %v", err)
+				}
+				return
+			}
+
+			if activeConnMode == "wg" {
+				dev, cleanupSystem, err := startSystemWireGuard(finalConf)
+				if err != nil {
+					log.Printf("[WG-SYSTEM] Ошибка системного WireGuard: %v", err)
+					return
+				}
+				defer dev.Close()
+				defer cleanupSystem()
+				log.Println("[WG-SYSTEM] Системный WireGuard поднят")
+				if err := runSystemSocks5Server(ctx, *socksAddr, *socksAuth, *socksUser, *socksPass); err != nil {
+					log.Printf("[WG-SYSTEM] SOCKS5 остановлен: %v", err)
 				}
 			}
 		case <-ctx.Done():

@@ -80,6 +80,7 @@ function buildStartPayload(state) {
     captchaMode: state.tunnel.captchaMode,
     vkAuthMode: state.tunnel.vkAuthMode,
     workers: Number(state.tunnel.workers) || 0,
+    directPatterns: state.directPatterns || [],
     transportMode: state.transportMode || "socks5",
   });
 

@@ -17,6 +17,7 @@ import (
 type wgQuickConfig struct {
 	privateKeyHex string
 	addresses     []netip.Addr
+	prefixes      []netip.Prefix
 	dns           []netip.Addr
 	mtu           int
 	peerPublicHex string
@@ -79,9 +80,15 @@ func parseWgQuick(conf string) (*wgQuickConfig, error) {
 							return nil, fmt.Errorf("Address %q: %w", part, err)
 						}
 						cfg.addresses = append(cfg.addresses, addr)
+						bits := 128
+						if addr.Is4() {
+							bits = 32
+						}
+						cfg.prefixes = append(cfg.prefixes, netip.PrefixFrom(addr, bits))
 						continue
 					}
 					cfg.addresses = append(cfg.addresses, prefix.Addr())
+					cfg.prefixes = append(cfg.prefixes, prefix)
 				}
 			case "dns":
 				for _, part := range strings.Split(val, ",") {

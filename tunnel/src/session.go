@@ -133,6 +133,12 @@ func (c *connectedUDPConn) WriteTo(p []byte, _ net.Addr) (int, error) { return c
 // github.com/anton48/vk-turn-proxy-ios, который к той же VK/OK TURN-инфре
 // (calls.okcdn.ru) по умолчанию ходит именно через TCP.
 func dialTURNConn(turnAddr string, tcp bool) (net.PacketConn, io.Closer, error) {
+	// В системных WG/RAW-режимах дефолтный маршрут смотрит в qWDTT TUN.
+	// TURN-сокет обязан остаться на физическом интерфейсе, иначе получится
+	// рекурсивный туннель. На остальных платформах это no-op.
+	if err := protectPhysicalEndpoint(turnAddr); err != nil {
+		return nil, nil, fmt.Errorf("маршрут до TURN %s: %w", turnAddr, err)
+	}
 	if !tcp {
 		resolved, err := net.ResolveUDPAddr("udp", turnAddr)
 		if err != nil {

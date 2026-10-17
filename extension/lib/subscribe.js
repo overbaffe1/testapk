@@ -385,7 +385,7 @@ export function parseSubscription(raw) {
  * @param {Profile} profile
  * @param {{socksHost?:string, socksPort?:number, deviceId?:string, goDns?:string,
  *          obfs?:string, captchaMode?:string, vkAuthMode?:string, listenHost?:string,
- *          transportMode?:"raw"|"wg"|"socks5"}} opts
+ *          directPatterns?:string[], transportMode?:"raw"|"wg"|"socks5"}} opts
  */
 export function buildTunnelArgs(profile, opts = {}) {
   const {
@@ -398,6 +398,7 @@ export function buildTunnelArgs(profile, opts = {}) {
     vkAuthMode = "anonymous",
     listenHost = "127.0.0.1",
     workers = 0,
+    directPatterns = [],
     transportMode = "socks5",
   } = opts;
 
@@ -419,9 +420,12 @@ export function buildTunnelArgs(profile, opts = {}) {
     "-vk-auth", vkAuthMode,
     "-go-dns", goDns,
     "-obfs", obfs,
-    "-mode", rawSelected ? "rawsocks" : "socks",
+    "-mode", rawSelected ? "rawsystem" : transportMode === "wg" ? "wg" : "socks",
     "-socks", `${socksHost}:${socksPort}`,
   ];
+  if ((rawSelected || transportMode === "wg") && Array.isArray(directPatterns) && directPatterns.length) {
+    args.push("-system-bypass", directPatterns.map((value) => String(value).trim()).filter(Boolean).join(","));
+  }
   return args;
 }
 

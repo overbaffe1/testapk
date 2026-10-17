@@ -184,7 +184,14 @@ function start({ args, socks, binary }) {
   }
 
   const fd = fs.openSync(LOG_FILE, "a");
-  const child = spawn(bin, args || [], {
+  const launchArgs = [...(args || [])];
+  const modeIndex = launchArgs.findIndex((arg) => arg === "-mode");
+  const mode = modeIndex >= 0 ? launchArgs[modeIndex + 1] : "";
+  const systemMode = mode === "wg" || mode === "rawsystem";
+  if (systemMode && !launchArgs.some((arg) => arg === "-log-file" || arg.startsWith("-log-file="))) {
+    launchArgs.push("-log-file", LOG_FILE);
+  }
+  const child = spawn(bin, launchArgs, {
     detached: true,
     stdio: ["ignore", fd, fd],
     cwd: HOME_DIR,
@@ -197,7 +204,7 @@ function start({ args, socks, binary }) {
     pid: child.pid,
     startedAt: Date.now(),
     socks: socks || null,
-    args: args || [],
+    args: launchArgs,
     binary: bin,
     socksReady: false,
     error: "",

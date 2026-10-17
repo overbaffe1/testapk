@@ -91,14 +91,7 @@ func dialIPv4Only(tnet *netstack.Net) func(ctx context.Context, network, addr st
 	}
 }
 
-// runSocks5Server serves SOCKS5 TCP CONNECT via WireGuard netstack until ctx is done.
-func runSocks5Server(ctx context.Context, listenAddr string, tnet *netstack.Net, authEnabled bool, username, password string) error {
-	conf := &socks5.Config{
-		Dial:     dialIPv4Only(tnet),
-		Resolver: &netstackNameResolver{tnet: tnet},
-		Rules:    ipv4OnlyRule{},
-		Logger:   log.New(io.Writer(socksLogFilter{}), "", 0),
-	}
+func serveSocks5(ctx context.Context, listenAddr string, conf *socks5.Config, authEnabled bool, username, password string) error {
 	if authEnabled {
 		conf.Credentials = socks5.StaticCredentials{username: password}
 	}
@@ -126,4 +119,25 @@ func runSocks5Server(ctx context.Context, listenAddr string, tnet *netstack.Net,
 		return err
 	}
 	return nil
+}
+
+// runSocks5Server serves SOCKS5 TCP CONNECT via userspace netstack.
+func runSocks5Server(ctx context.Context, listenAddr string, tnet *netstack.Net, authEnabled bool, username, password string) error {
+	return serveSocks5(ctx, listenAddr, &socks5.Config{
+		Dial:     dialIPv4Only(tnet),
+		Resolver: &netstackNameResolver{tnet: tnet},
+		Rules:    ipv4OnlyRule{},
+		Logger:   log.New(io.Writer(socksLogFilter{}), "", 0),
+	}, authEnabled, username, password)
+}
+
+// runSystemSocks5Server использует обычный сетевой стек ОС. В системных
+// WG/RAW-режимах его исходящие соединения уже маршрутизируются через qWDTT TUN.
+func runSystemSocks5Server(ctx context.Context, listenAddr string, authEnabled bool, username, password string) error {
+	dialer := &net.Dialer{}
+	return serveSocks5(ctx, listenAddr, &socks5.Config{
+		Dial:   dialer.DialContext,
+		Rules:  ipv4OnlyRule{},
+		Logger: log.New(io.Writer(socksLogFilter{}), "", 0),
+	}, authEnabled, username, password)
 }

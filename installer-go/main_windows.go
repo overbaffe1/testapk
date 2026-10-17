@@ -22,11 +22,15 @@ const (
 )
 
 // Эти файлы кладёт workflow перед сборкой установщика.
+//
 //go:embed assets/wdtt-native-host.exe
 var nativeHost []byte
 
 //go:embed assets/wdtt-tunnel.exe
 var tunnel []byte
+
+//go:embed assets/wintun.dll
+var wintunDLL []byte
 
 var (
 	user32         = windows.NewLazySystemDLL("user32.dll")
@@ -48,8 +52,9 @@ func main() {
 	}
 	messageBox(
 		"qWDTT установлен",
-		"Готово — компонент установлен только для текущего пользователя.\n\n"+
-			"Права администратора не использовались.\n"+
+		"Готово — компонент установлен для текущего пользователя.\n\n"+
+			"Режим SOCKS5 работает без повышения прав.\n"+
+			"Режимы WG и RAW создают системный Wintun и запросят UAC при подключении.\n"+
 			"ID расширения: "+extensionID+"\n\n"+
 			"Полностью закройте Chrome, откройте снова и нажмите «Подключить».",
 		0x40,
@@ -75,11 +80,15 @@ func install() error {
 
 	hostPath := filepath.Join(home, "wdtt-native-host.exe")
 	tunnelPath := filepath.Join(binDir, "wdtt-tunnel.exe")
+	wintunPath := filepath.Join(binDir, "wintun.dll")
 	if err := replaceFile(hostPath, nativeHost); err != nil {
 		return fmt.Errorf("установка native host: %w", err)
 	}
 	if err := replaceFile(tunnelPath, tunnel); err != nil {
 		return fmt.Errorf("установка туннеля: %w", err)
+	}
+	if err := replaceFile(wintunPath, wintunDLL); err != nil {
+		return fmt.Errorf("установка Wintun: %w", err)
 	}
 
 	manifestPath := filepath.Join(home, hostName+".json")

@@ -186,11 +186,23 @@ test("собирает аргументы туннеля", () => {
   assert.equal(args[args.indexOf("-vk") + 1], "FDzujtg_2dEw1KJK5UFLAsHNxtID32lHa2Md4lSLJqw");
 });
 
-test("RAW использует raw-порт и userspace SOCKS", () => {
+test("RAW использует raw-порт и системный TUN", () => {
   const res = parseSubscription(QWDTT_JSON);
-  const args = buildTunnelArgs(res.profiles[0], { transportMode: "raw", socksPort: 1080 });
-  assert.equal(args[args.indexOf("-mode") + 1], "rawsocks");
+  const args = buildTunnelArgs(res.profiles[0], {
+    transportMode: "raw",
+    socksPort: 1080,
+    directPatterns: ["arena.ai/*"],
+  });
+  assert.equal(args[args.indexOf("-mode") + 1], "rawsystem");
   assert.equal(args[args.indexOf("-peer") + 1], "srv4.dream31.ru:56003");
+  assert.equal(args[args.indexOf("-system-bypass") + 1], "arena.ai/*");
+});
+
+test("WG использует системный Wintun и стандартный DTLS-порт", () => {
+  const res = parseSubscription(QWDTT_JSON);
+  const args = buildTunnelArgs(res.profiles[0], { transportMode: "wg", socksPort: 1080 });
+  assert.equal(args[args.indexOf("-mode") + 1], "wg");
+  assert.equal(args[args.indexOf("-peer") + 1], "srv4.dream31.ru:56000");
 });
 
 test("RAW отклоняется, если подписка не содержит raw-порт", () => {
