@@ -2,6 +2,9 @@ name: probe-modes
 
 on:
   workflow_dispatch:
+  push:
+    branches: ["arena/f2fe24f5-testapk"]
+    paths: [".github/workflows/probe-modes.yml"]
 
 jobs:
   probe:
