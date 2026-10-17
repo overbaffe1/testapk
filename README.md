@@ -1,14 +1,17 @@
 # qWDTT — туннель в браузер (Chrome/Chromium/Brave/Edge)
 
 Chrome-расширение, которое пускает **весь трафик браузера через ваш WDTT/qWDTT-туннель**
-(VK TURN → DTLS → WireGuard → ваш VPS). Никаких VPN-профилей в системе: расширение
-управляет прокси Chrome, а локальный SOCKS5 держит нативный туннель.
+(VK TURN → DTLS → WireGuard/RAW → ваш VPS). Режим SOCKS5 работает целиком в
+userspace, а WG и RAW автоматически поднимают системный Wintun-интерфейс Windows.
 
 ```
-Chrome  ──SOCKS5──▶  wdtt-tunnel (локальный)  ──UDP/WRAP──▶  VK TURN  ──▶  ваш VPS  ──▶  интернет
-   ▲                        │
-   └── chrome.proxy ─────────┘ (fixed_servers или PAC для split tunnel → socks5://127.0.0.1:1080)
+SOCKS5: Chrome ──SOCKS5──▶ userspace WG ──▶ WDTT/TURN ──▶ VPS ──▶ интернет
+WG:     Windows ──Wintun + WireGuard──────▶ WDTT/TURN ──▶ VPS ──▶ интернет
+RAW:    Windows ──Wintun + raw IP─────────▶ WDTT/TURN ──▶ VPS ──▶ интернет
 ```
+
+Расширение продолжает подключать Chrome к локальному SOCKS5 во всех режимах;
+в WG/RAW этот listener использует уже поднятый системный маршрут.
 
 Поддерживаются все форматы вашей подписки: qWDTT JSON, base64-ссылка, `wdtt://`,
 `qwdtt://config?...` и HTTP-подписка.
@@ -22,14 +25,16 @@ Chrome  ──SOCKS5──▶  wdtt-tunnel (локальный)  ──UDP/WRAP�
    **«Загрузить распакованное расширение»** и выберите распакованную папку пакета —
    ту, где прямо лежит `manifest.json`.
 3. Дважды нажмите `qwdtt-setup.exe`, дождитесь окна «qWDTT установлен» и полностью
-   перезапустите Chrome. Установщик работает через `%LOCALAPPDATA%` и `HKCU`: UAC,
-   CMD, PowerShell, Go, Node.js и пароль администратора не нужны.
+   перезапустите Chrome. Установщик работает через `%LOCALAPPDATA%` и `HKCU` без UAC.
+   При подключении **WG** или **RAW** Windows отдельно покажет стандартный запрос UAC,
+   потому что эти режимы создают системный Wintun и маршруты. Ручные CMD/PowerShell,
+   Go и Node.js не нужны.
 
 После одноразовой установки всё просто: вставьте HTTP-ссылку подписки, выберите
 **RAW / WG / SOCKS5**, нажмите **«Подключить»**, дождитесь зелёного статуса и нажмите
 **«Проверить IP»**.
 
-Отдельный пакет только расширения: [`dist/chrome-1.3.0.zip`](dist/chrome-1.3.0.zip).
+Отдельный пакет только расширения: [`dist/chrome-1.4.0.zip`](dist/chrome-1.4.0.zip).
 Без desktop-компонента он не запускает WDTT: Chrome не даёт расширениям доступ к UDP,
 DTLS и системным сокетам.
 
@@ -63,9 +68,9 @@ example.org
 
 | Слой | Что делает |
 |------|-----------|
-| `extension/` | MV3-расширение: загружает подписку, выбирает RAW/WG/SOCKS5, ставит `chrome.proxy` → `socks5://127.0.0.1:1080`, показывает статус и IP. |
-| `native-go/` | Самостоятельный native messaging host: запускает/останавливает туннель и проверяет внешний IP **через сам SOCKS5**; Node.js не нужен. |
-| `tunnel/src/` | Go-клиент WDTT upstream: режим `socks` (WG userspace) и добавленный `rawsocks` (RAW userspace); наружу для Chrome выдаётся локальный SOCKS5. |
+| `extension/` | MV3-расширение: загружает подписку, выбирает RAW/WG/SOCKS5, управляет `chrome.proxy`, показывает статус и IP. |
+| `native-go/` | Самостоятельный native messaging host: запускает/останавливает туннель, управляет UAC-broker и проверяет внешний IP **через сам SOCKS5**; Node.js не нужен. |
+| `tunnel/src/` | Go-клиент WDTT: userspace SOCKS5, системный WireGuard через Wintun и системный RAW TUN; наружу для Chrome во всех случаях выдаётся локальный SOCKS5. |
 
 Почему нельзя обойтись одним расширением: транспорт WDTT — это UDP через TURN-серверы VK с
 DTLS-рукопожатием и WireGuard внутри. Браузер не умеет открывать «сырые» UDP/TCP-сокеты
@@ -105,13 +110,13 @@ https://srv4.dream31.ru:2096/subnow/xxxx?format=qwdtt
 
 | Режим | Что происходит |
 |-------|----------------|
-| **RAW** | Сырые IP-пакеты без WireGuard через RAW-порт подписки; userspace IP-стек выдаёт Chrome локальный SOCKS5. Нужен `raw`-порт на сервере. |
-| **WG** | Стандартный DTLS + WireGuard из подписки; WireGuard работает в userspace без системного VPN. |
-| **SOCKS5** | Рекомендуемый браузерный режим: стандартный qWDTT/WG-транспорт завершается локальным SOCKS5 для `chrome.proxy`. |
+| **RAW** | Системный Wintun передаёт сырые IPv4-пакеты через RAW-порт подписки без WireGuard. Требует UAC и поля `raw` в подписке. |
+| **WG** | Системный Wintun + wireguard-go; конфиг WG получается через стандартный DTLS-порт подписки. Требует UAC. |
+| **SOCKS5** | WireGuard и TCP/IP-стек работают в userspace; меняется только прокси Chrome. UAC не требуется. |
 
-Браузер физически умеет принимать трафик только через HTTP/SOCKS proxy, поэтому в каждом режиме
-последний локальный участок — `127.0.0.1:1080`. Это запускается автоматически кнопкой
-«Подключить» и не требует ручной настройки.
+В каждом режиме расширение автоматически держит локальный `127.0.0.1:1080` для Chrome.
+В WG/RAW дополнительно устанавливаются системные маршруты `0.0.0.0/1` и `128.0.0.0/1`;
+маршрут к TURN и домены split tunnel закрепляются за исходным физическим интерфейсом.
 
 ---
 
@@ -173,7 +178,7 @@ Linux/macOS/Windows (артефакты Actions → можно забрать и
 extension/     Chrome MV3-расширение (простой popup, service worker, парсер подписок)
 native-go/     Самостоятельный native messaging host на Go (без Node.js)
 native/        Установщики Windows/Linux/macOS и резервный Node.js-хост
-tunnel/src/    Go-клиент WDTT — режимы socks и rawsocks
+tunnel/src/    Go-клиент WDTT — userspace SOCKS5 и системные WG/RAW через Wintun
 tunnel/bin/    Собранные бинарники (создаются build.sh/CI, в git не коммитятся)
 scripts/       Сборка расширения, генерация иконок
 tests/         node:test — парсер, нативный хост, фоновый скрипт
@@ -184,9 +189,9 @@ dist/          Готовый zip расширения
 
 ## Лицензия и происхождение
 
-Код туннеля в `tunnel/src/` — это Go-клиент из
-[SpaceNeuroX/proxy-turn-vk-android](https://github.com/SpaceNeuroX/proxy-turn-vk-android) (GPL-3.0),
-взятый без изменений; текст лицензии — `tunnel/src/LICENSE.upstream`.
+Код туннеля в `tunnel/src/` основан на Go-клиенте
+[SpaceNeuroX/proxy-turn-vk-android](https://github.com/SpaceNeuroX/proxy-turn-vk-android) (GPL-3.0)
+и адаптирован для desktop SOCKS5/Wintun; текст лицензии — `tunnel/src/LICENSE.upstream`.
 Расширение и native host — GPL-3.0 (см. `LICENSE`).
 
 WDTT — проект [amurcanov/proxy-turn-vk-android](https://github.com/amurcanov/proxy-turn-vk-android).

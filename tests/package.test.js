@@ -25,3 +25,11 @@ test("Windows-установщик пишет только в профиль п�
   assert.match(installer, /registry\.CURRENT_USER/);
   assert.doesNotMatch(installer, /registry\.LOCAL_MACHINE|Program Files/i);
 });
+
+test("Windows-пакет устанавливает официальный Wintun рядом с туннелем", () => {
+  const installer = fs.readFileSync(new URL("../installer-go/main_windows.go", import.meta.url), "utf8");
+  const workflow = fs.readFileSync(new URL("../.github/workflows/build-tunnel.yml", import.meta.url), "utf8");
+  assert.match(installer, /go:embed assets\/wintun\.dll/);
+  assert.match(installer, /replaceFile\(wintunPath, wintunDLL\)/);
+  assert.match(workflow, /https:\/\/www\.wintun\.net\/builds\/wintun-0\.14\.1\.zip/);
+});
